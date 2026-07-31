@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+# Mở game THỬ LỬA.
+#   ./play.sh          bản Godot isometric 2.5D
+#   ./play.sh web      bản web một file, mở bằng browser mặc định
+#   ./play.sh test     chạy toàn bộ test không cần cửa sổ
+#   ./play.sh shot     chụp ảnh màn chờ và giữa trận ra godot/_shot-*.png
+set -euo pipefail
+
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+find_godot() {
+	# GODOT do người dùng đặt thì phải dùng đúng cái đó, sai thì báo lỗi chứ
+	# không lặng lẽ chạy bản khác.
+	if [ -n "${GODOT:-}" ]; then
+		command -v "$GODOT" 2>/dev/null && return
+		echo "GODOT=$GODOT không chạy được." >&2
+		exit 1
+	fi
+	for c in "$HOME/.local/bin/godot" godot godot4; do
+		command -v "$c" >/dev/null 2>&1 && { command -v "$c"; return; }
+	done
+	cat >&2 <<-'EOF'
+	Không tìm thấy Godot. Cài bản 4.x rồi thử lại:
+
+	  curl -sL -o /tmp/godot.zip \
+	    https://github.com/godotengine/godot/releases/download/4.7.1-stable/Godot_v4.7.1-stable_linux.x86_64.zip
+	  unzip -o /tmp/godot.zip -d /tmp
+	  mv /tmp/Godot_v4.7.1-stable_linux.x86_64 ~/.local/bin/godot
+	  chmod +x ~/.local/bin/godot
+
+	Hoặc trỏ thẳng vào file có sẵn:  GODOT=/duong/dan/godot ./play.sh
+	EOF
+	exit 1
+}
+
+case "${1:-game}" in
+web)
+	f="$here/thu-lua-roguelite.html"
+	echo "Mở bản web: $f"
+	xdg-open "$f" >/dev/null 2>&1 || open "$f" 2>/dev/null || {
+		echo "Không mở được tự động. Kéo file này vào browser: $f" >&2; exit 1; }
+	;;
+test)
+	godot="$(find_godot)"
+	for t in smoke dash; do
+		echo "════ tests/$t.gd ════"
+		"$godot" --headless --path "$here/godot" --script "tests/$t.gd"
+	done
+	;;
+shot)
+	godot="$(find_godot)"
+	"$godot" --path "$here/godot" --script tests/capture.gd
+	echo "Ảnh nằm ở $here/godot/_shot-menu.png và _shot-game.png"
+	;;
+game)
+	godot="$(find_godot)"
+	exec "$godot" --path "$here/godot"
+	;;
+*)
+	echo "Dùng: ./play.sh [game|web|test|shot]" >&2
+	exit 2
+	;;
+esac

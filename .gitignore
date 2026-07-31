@@ -4,8 +4,9 @@
 /android/
 # Chứa đường dẫn máy cá nhân, đôi khi cả mật khẩu keystore
 export_presets.cfg
-# Ảnh chụp tạm khi chạy tests/capture.gd
-_shot.png
+# Ảnh chụp tạm khi chạy tests/capture.gd (Godot tự sinh cả .import cho chúng)
+_shot*.png
+_shot*.png.import
 
 # Lưu ý: các file *.import và *.uid PHẢI được commit —
 # chúng giữ thiết lập import và ID tài nguyên, thiếu là project hỏng tham chiếu.

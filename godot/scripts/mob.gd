@@ -23,7 +23,7 @@ var speed_pct: float = 1.6 * 5.5   ## %/giây — hệ số 5.5 lấy từ bản
 var flies: bool = false
 var dead: bool = false
 
-var target: Node3D
+var target: Hero
 
 var _wob: float = randf() * TAU
 var _flash: float = 0.0
@@ -62,7 +62,8 @@ func _physics_process(delta: float) -> void:
 		_wob += delta * 6.0
 		sprite.position.y = _base_y + sin(_wob) * 0.15
 
-	if d < TOUCH_PCT * PCT:
+	# Chạm được nhưng nhân vật đang lăn né thì đòn trượt: quái không chết, cứ đuổi tiếp.
+	if d < TOUCH_PCT * PCT and not target.is_invulnerable():
 		reached_player.emit(damage)
 		_die(false)
 
