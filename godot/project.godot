@@ -1,12 +1,12 @@
-; Project THỬ LỬA — bản 2.5D isometric
+; EMBERHOLD — map vây isometric 2.5D
 ; Chỉnh trong editor thì Godot sẽ ghi đè file này, cứ thoải mái sửa.
 
 config_version=5
 
 [application]
 
-config/name="Thử Lửa — Isometric"
-config/description="Map vây isometric 2.5D. Sprite 2D billboard trong scene 3D có đèn thật."
+config/name="Emberhold"
+config/description="Trụ lại giữa vòng vây hầm mộ. Sprite 2D billboard trong scene 3D có đèn thật."
 run/main_scene="res://scenes/Swarm.tscn"
 config/features=PackedStringArray("4.6", "Forward Plus")
 

@@ -2,7 +2,8 @@ class_name Swarm
 extends Node3D
 
 ## Map vây: sống sót hết giờ. Quái spawn ở rìa sân, càng lâu càng dày.
-## Số liệu cân bằng lấy từ bản HTML, có chỉnh lại cho khớp cú lăn né mà bản web không có.
+## Số liệu cân bằng bắt nguồn từ bản web (commit cb5e5d9) nhưng đã siết lại hẳn
+## cho khớp cú lăn né — xem tests/balance.gd và README.
 
 const PCT := 0.2
 const SURVIVE := 22.0

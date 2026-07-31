@@ -386,7 +386,7 @@ theme_override_constants/margin_bottom = 32
 theme_override_constants/separation = 12
 
 [node name="Title" type="Label" parent="HUD/MenuPanel/Margin/Box"]
-text = "THỬ LỬA"
+text = "EMBERHOLD"
 horizontal_alignment = 1
 label_settings = SubResource("Lbl_title")
 

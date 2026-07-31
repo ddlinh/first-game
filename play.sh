@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# Mở game THỬ LỬA.
-#   ./play.sh          bản Godot isometric 2.5D
-#   ./play.sh web      bản web một file, mở bằng browser mặc định
+# Mở EMBERHOLD.
+#   ./play.sh          chơi game
 #   ./play.sh test     chạy toàn bộ test không cần cửa sổ
 #   ./play.sh shot     chụp ảnh màn chờ và giữa trận ra godot/_shot-*.png
 set -euo pipefail
@@ -34,12 +33,6 @@ find_godot() {
 }
 
 case "${1:-game}" in
-web)
-	f="$here/thu-lua-roguelite.html"
-	echo "Mở bản web: $f"
-	xdg-open "$f" >/dev/null 2>&1 || open "$f" 2>/dev/null || {
-		echo "Không mở được tự động. Kéo file này vào browser: $f" >&2; exit 1; }
-	;;
 test)
 	godot="$(find_godot)"
 	for t in smoke dash; do
@@ -57,7 +50,7 @@ game)
 	exec "$godot" --path "$here/godot"
 	;;
 *)
-	echo "Dùng: ./play.sh [game|web|test|shot]" >&2
+	echo "Dùng: ./play.sh [game|test|shot]" >&2
 	exit 2
 	;;
 esac

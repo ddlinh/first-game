@@ -21,7 +21,7 @@ func setup() -> void:
 	broken = false
 
 
-# --- công thức gốc từ thu-lua-roguelite.html ---
+# --- công thức gốc từ bản web (xem thu-lua-roguelite.html ở commit cb5e5d9) ---
 
 ## Tốc độ chạy, đơn vị %/giây. Nhẹ = nhanh.
 func speed_pct() -> float:
