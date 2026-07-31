@@ -1,0 +1,58 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://scripts/hero.gd" id="1_hero"]
+[ext_resource type="Texture2D" path="res://art/hero.svg" id="2_herotex"]
+
+[sub_resource type="TorusMesh" id="TorusMesh_aura"]
+inner_radius = 1.92
+outer_radius = 2.0
+
+[sub_resource type="StandardMaterial3D" id="Mat_aura"]
+transparency = 1
+shading_mode = 0
+albedo_color = Color(1, 0.72, 0.35, 0.55)
+emission_enabled = true
+emission = Color(1, 0.65, 0.28, 1)
+emission_energy_multiplier = 0.6
+
+[sub_resource type="SphereMesh" id="Sphere_blob"]
+radius = 0.42
+height = 0.04
+radial_segments = 20
+rings = 3
+
+[sub_resource type="StandardMaterial3D" id="Mat_blob"]
+transparency = 1
+shading_mode = 0
+albedo_color = Color(0, 0, 0, 0.38)
+
+[node name="Hero" type="Node3D"]
+script = ExtResource("1_hero")
+
+[node name="Blob" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.02, 0)
+cast_shadow = 0
+mesh = SubResource("Sphere_blob")
+surface_material_override/0 = SubResource("Mat_blob")
+
+[node name="Sprite" type="Sprite3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.95, 0)
+cast_shadow = 0
+pixel_size = 0.015
+billboard = 2
+shaded = true
+alpha_cut = 1
+texture = ExtResource("2_herotex")
+
+[node name="Aura" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.04, 0)
+cast_shadow = 0
+mesh = SubResource("TorusMesh_aura")
+surface_material_override/0 = SubResource("Mat_aura")
+
+[node name="Torch" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.7, 0)
+light_color = Color(1, 0.66, 0.33, 1)
+light_energy = 4.0
+shadow_enabled = false
+omni_range = 15.0

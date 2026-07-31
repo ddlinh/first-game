@@ -1,0 +1,22 @@
+# --- Godot 4 ---
+# Cache import, Godot tự sinh lại khi mở project
+.godot/
+/android/
+# Chứa đường dẫn máy cá nhân, đôi khi cả mật khẩu keystore
+export_presets.cfg
+# Ảnh chụp tạm khi chạy tests/capture.gd
+_shot.png
+
+# Lưu ý: các file *.import và *.uid PHẢI được commit —
+# chúng giữ thiết lập import và ID tài nguyên, thiếu là project hỏng tham chiếu.
+
+# --- Công cụ cục bộ ---
+.claude/
+
+# --- Hệ điều hành / editor ---
+.DS_Store
+Thumbs.db
+*~
+*.swp
+.idea/
+.vscode/

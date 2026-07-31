@@ -1,0 +1,963 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>THỬ LỬA — Roguelite Rèn & Chiến</title>
+<style>
+  :root{
+    --bg:#0e0b08; --iron:#15110d; --panel:#1c1712;
+    --edge:#332619; --edge2:#4a3823;
+    --heat:#ff5e1a; --heat2:#ffa347; --gold:#f0cf7a; --parch:#e8dcc4; --dim:#998872;
+    --hard:#ff8a5c; --tough:#7fbfa0; --weight:#c8a2d8; --rust:#7fb0d0;
+    --fail:#ff5555; --pass:#8fe08f; --hp:#e0574f; --dur:#5fb0d8; --foe:#c96a6a;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Trebuchet MS','Segoe UI',system-ui,sans-serif;
+    background:radial-gradient(900px 500px at 50% -5%,#2a1608 0%,transparent 55%),var(--bg);
+    color:var(--parch);min-height:100vh;padding:14px}
+  .wrap{max-width:840px;margin:0 auto}
+  header{display:flex;justify-content:space-between;align-items:flex-end;padding:6px 2px 12px;border-bottom:1px solid var(--edge)}
+  .logo{font-size:22px;font-weight:bold;letter-spacing:2px;
+    background:linear-gradient(180deg,var(--heat2),var(--heat));
+    -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+  .logo small{display:block;font-size:9px;letter-spacing:3px;color:var(--dim);-webkit-text-fill-color:var(--dim)}
+  .runinfo{text-align:right;font-size:12px;color:var(--dim)}
+  .runinfo b{color:var(--gold)}
+
+  .panel{background:linear-gradient(180deg,#221a12,var(--panel));border:1px solid var(--edge2);
+    border-radius:14px;padding:15px 16px;margin:13px 0}
+  .tag{font-size:11px;letter-spacing:2px;color:var(--gold);text-transform:uppercase}
+  .h1{font-size:19px;font-weight:bold;margin:3px 0 8px}
+  .muted{color:var(--dim);font-size:12px;line-height:1.5}
+  .center{text-align:center}
+
+  /* stats */
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:12px 0}
+  .stat{background:var(--iron);border:1px solid var(--edge);border-radius:11px;padding:9px 6px;text-align:center}
+  .stat .ic{font-size:18px} .stat .nm{font-size:10px;color:var(--dim);margin-top:1px}
+  .stat .num{font-size:19px;font-weight:bold;font-variant-numeric:tabular-nums}
+  .stat.hard .num{color:var(--hard)} .stat.tough .num{color:var(--tough)}
+  .stat.weight .num{color:var(--weight)} .stat.rust .num{color:var(--rust)}
+  .stat .role{font-size:8.5px;color:var(--dim);margin-top:2px}
+
+  /* forge cards */
+  .pipe{display:flex;gap:6px;align-items:center;flex-wrap:wrap;min-height:34px;
+    padding:8px;background:#0b0805;border:1px dashed var(--edge);border-radius:11px;margin-bottom:6px}
+  .pipe .empty{color:var(--dim);font-size:12px;padding:4px}
+  .chip{font-size:11px;padding:4px 8px;border-radius:7px;background:var(--edge);white-space:nowrap}
+  .chip .step{opacity:.6;margin-right:3px}
+  .arrow{color:var(--dim);font-size:11px}
+  .energy{font-size:12px;color:var(--dim);margin:4px 2px}.energy b{color:var(--heat2)}
+  .hand{display:grid;grid-template-columns:repeat(auto-fill,minmax(146px,1fr));gap:9px;margin:8px 0}
+  .cardx{background:linear-gradient(180deg,#241d15,#191410);border:1px solid var(--edge2);
+    border-radius:12px;padding:10px;cursor:pointer;transition:transform .08s,border-color .1s;position:relative}
+  .cardx:hover{transform:translateY(-3px);border-color:var(--heat)}
+  .cardx.disabled{opacity:.4;cursor:not-allowed;transform:none;border-color:var(--edge)}
+  .cardx .kind{font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--dim)}
+  .cardx .cn{font-size:13px;font-weight:bold;margin:2px 0 6px;display:flex;gap:4px;align-items:center}
+  .cardx .cost{position:absolute;top:8px;right:9px;font-size:12px;color:var(--heat2);font-weight:bold}
+  .cardx .note{color:var(--dim);font-size:10px;line-height:1.4;margin-top:5px}
+  .delta{padding:1px 5px;border-radius:5px;margin:0 3px 3px 0;display:inline-block;font-size:11px;font-variant-numeric:tabular-nums}
+  .d-hard{background:rgba(255,138,92,.15);color:var(--hard)} .d-tough{background:rgba(127,191,160,.15);color:var(--tough)}
+  .d-weight{background:rgba(200,162,216,.15);color:var(--weight)} .d-rust{background:rgba(127,176,208,.15);color:var(--rust)}
+
+  .btn{border:none;border-radius:11px;padding:12px;font-size:15px;font-weight:bold;cursor:pointer}
+  .btn.primary{background:linear-gradient(180deg,var(--heat2),var(--heat));color:#2a1000}
+  .btn.primary:disabled{background:#3a2c1c;color:#6f6050;cursor:not-allowed}
+  .btn.ghost{background:var(--iron);border:1px solid var(--edge);color:var(--dim)}
+  .btn.full{width:100%}
+  .actions{display:flex;gap:10px;margin-top:12px}
+
+  /* map */
+  .map{display:flex;flex-direction:column;gap:10px}
+  .node{display:flex;gap:12px;align-items:center;background:var(--iron);border:1px solid var(--edge);
+    border-radius:12px;padding:12px 14px;cursor:pointer;transition:border-color .1s}
+  .node:hover{border-color:var(--heat)}
+  .node.done{opacity:.45;pointer-events:none}
+  .node.locked{opacity:.3;pointer-events:none}
+  .node .nic{font-size:28px}
+  .node .nt{font-weight:bold;font-size:15px}
+  .node .nd{font-size:11.5px;color:var(--dim);margin-top:2px}
+  .node .diff{margin-left:auto;text-align:right;font-size:11px;color:var(--dim)}
+
+  /* battle */
+  .arena{display:grid;grid-template-columns:1fr 60px 1fr;gap:10px;align-items:center;margin:10px 0}
+  .fighter{background:var(--iron);border:1px solid var(--edge);border-radius:12px;padding:12px;text-align:center}
+  .fighter .face{font-size:44px}
+  .fighter .fname{font-weight:bold;margin:4px 0 8px;font-size:14px}
+  .vs{text-align:center;color:var(--dim);font-weight:bold}
+  /* SÂN KHẤU SVG */
+  .stage{position:relative;background:linear-gradient(180deg,#1a130d 0%,#231a10 70%,#2a2013 100%);
+    border:1px solid var(--edge2);border-radius:14px;height:190px;overflow:hidden;margin:10px 0}
+  .stage .ground{position:absolute;left:0;right:0;bottom:0;height:34px;
+    background:linear-gradient(180deg,#2e2416,#1c1509);border-top:1px solid #3a2c1a}
+  .actor{position:absolute;bottom:26px;transition:transform .18s ease-out}
+  .actor.hero{left:16px}
+  .actor.foe{right:16px}
+  .actor.lungeL{transform:translateX(60px)}
+  .actor.lungeR{transform:translateX(-60px)}
+  .actor.hit{animation:shake .3s}
+  @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+  .dmgpop{position:absolute;font-weight:bold;font-size:20px;pointer-events:none;
+    animation:pop 0.7s ease-out forwards;text-shadow:0 2px 4px #000}
+  @keyframes pop{0%{opacity:0;transform:translateY(0) scale(.6)}20%{opacity:1;transform:translateY(-8px) scale(1.1)}100%{opacity:0;transform:translateY(-34px) scale(1)}}
+  .spark{position:absolute;font-size:22px;pointer-events:none;animation:spk .5s ease-out forwards}
+  @keyframes spk{0%{opacity:0;transform:scale(.4)}30%{opacity:1;transform:scale(1.3)}100%{opacity:0;transform:scale(1)}}
+  @media(prefers-reduced-motion:reduce){.actor{transition:none}.dmgpop,.spark,.actor.hit{animation:none}}
+
+  /* ===== MAP VÂY (SWARM) — di chuyển tự do ===== */
+  .swarm{position:relative;height:360px;background:
+    radial-gradient(400px 300px at 50% 50%,#241a0e,#140d06);
+    border:1px solid var(--edge2);border-radius:14px;overflow:hidden;margin:10px 0;touch-action:none}
+  .swarm .field{position:absolute;inset:0}
+  .unit{position:absolute;transform:translate(-50%,-50%);z-index:3;will-change:left,top}
+  .hero-u{z-index:5}
+  .hero-u.swing{animation:swingsword .22s}
+  @keyframes swingsword{0%{transform:translate(-50%,-50%) rotate(0)}50%{transform:translate(-50%,-50%) rotate(-10deg)}100%{transform:translate(-50%,-50%) rotate(0)}}
+  .aura{position:absolute;transform:translate(-50%,-50%);border-radius:50%;
+    border:2px solid rgba(255,163,71,.35);z-index:2;pointer-events:none;opacity:0}
+  .aura.flash{animation:auraflash .3s}
+  @keyframes auraflash{0%{opacity:.7;border-color:rgba(255,220,120,.8)}100%{opacity:0}}
+  .mob-u.dead{animation:mobdie .3s forwards}
+  @keyframes mobdie{0%{opacity:1}100%{opacity:0;transform:translate(-50%,-50%) scale(.3)}}
+  .dpop{position:absolute;transform:translate(-50%,-50%);font-size:14px;font-weight:bold;
+    color:#ffb15c;z-index:7;pointer-events:none;text-shadow:0 1px 3px #000;animation:dpop .6s forwards}
+  @keyframes dpop{0%{opacity:0}20%{opacity:1}100%{opacity:0;transform:translate(-50%,-140%) scale(1.1)}}
+  .swarm-hud{position:absolute;top:8px;left:0;right:0;display:flex;justify-content:space-around;z-index:8;font-size:12px;font-weight:bold}
+  .swarm-hud .box{background:rgba(10,7,4,.7);border:1px solid var(--edge);border-radius:8px;padding:4px 10px}
+  .swarm-hud .dur{color:var(--dur)} .swarm-hud .hp{color:var(--hp)} .swarm-hud .kills{color:var(--gold)} .swarm-hud .time{color:var(--parch)}
+  .swarm-tip{position:absolute;bottom:6px;left:0;right:0;text-align:center;font-size:10.5px;color:var(--dim);z-index:7}
+  /* nút điều khiển cảm ứng */
+  .dpad{display:grid;grid-template-columns:repeat(3,46px);grid-template-rows:repeat(3,46px);
+    gap:6px;justify-content:center;margin:10px auto 0}
+  .dpad button{background:var(--iron);border:1px solid var(--edge2);border-radius:10px;
+    color:var(--heat2);font-size:20px;font-weight:bold;cursor:pointer;user-select:none;-webkit-user-select:none;touch-action:none}
+  .dpad button:active{background:linear-gradient(180deg,var(--heat2),var(--heat));color:#2a1000}
+  .dpad .up{grid-column:2;grid-row:1} .dpad .left{grid-column:1;grid-row:2}
+  .dpad .right{grid-column:3;grid-row:2} .dpad .down{grid-column:2;grid-row:3}
+  .dpad .mid{grid-column:2;grid-row:2;background:transparent;border:none;color:var(--dim);font-size:10px;cursor:default}
+  .bar{height:12px;border-radius:6px;background:#0b0805;overflow:hidden;margin:6px 0 2px;border:1px solid var(--edge)}
+  .bar > i{display:block;height:100%;transition:width .25s}
+  .bar.hp > i{background:linear-gradient(90deg,#b83c34,var(--hp))}
+  .bar.dur > i{background:linear-gradient(90deg,#3a7ea0,var(--dur))}
+  .bar.foe > i{background:linear-gradient(90deg,#a04c4c,var(--foe))}
+  .barlbl{font-size:10px;color:var(--dim);display:flex;justify-content:space-between}
+  .log{background:#0b0805;border:1px solid var(--edge);border-radius:11px;padding:10px 12px;
+    height:120px;overflow-y:auto;font-size:12px;line-height:1.65;margin:10px 0}
+  .log .ln{margin-bottom:2px}
+  .log .hit{color:var(--parch)} .log .warn{color:var(--heat2)} .log .bad{color:var(--fail)}
+  .log .good{color:var(--pass)} .log .sys{color:var(--dim)}
+  .interv{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:6px}
+  .iv{background:var(--iron);border:1px solid var(--edge2);border-radius:10px;padding:9px;cursor:pointer;text-align:center;font-size:12px}
+  .iv:hover{border-color:var(--heat)}
+  .iv.disabled{opacity:.4;cursor:not-allowed}
+  .iv .ivic{font-size:20px}
+  .iv .ivn{font-weight:bold;margin:2px 0} .iv .ivd{font-size:10px;color:var(--dim);line-height:1.35}
+  .iv .cd{font-size:10px;color:var(--heat2)}
+
+  .overlay{position:fixed;inset:0;background:rgba(6,4,2,.9);display:flex;align-items:center;justify-content:center;z-index:50;padding:20px}
+  .modal{background:linear-gradient(180deg,#241a12,#16110c);border:1px solid var(--edge2);border-radius:18px;padding:24px;max-width:460px;width:100%;text-align:center}
+  .modal .big{font-size:52px} .modal h2{font-size:23px;margin:4px 0}
+  .lesson{background:#0e0b08;border-left:3px solid var(--gold);border-radius:8px;padding:11px 13px;text-align:left;font-size:12.5px;line-height:1.55;margin:14px 0}
+  .lesson b{color:var(--gold)}
+  .hidden{display:none}
+  @media(max-width:560px){.stats{grid-template-columns:repeat(2,1fr)}.hand{grid-template-columns:repeat(2,1fr)}
+    .arena{grid-template-columns:1fr;gap:8px}.vs{display:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">THỬ LỬA<small>RÈN · MANG ĐI CHIẾN · XEM NÓ CÓ GÃY</small></div>
+    <div class="runinfo">Chặng <b id="stage">0</b>/6 · <b id="phase">Rèn</b><br>🏅 <b id="rep">0</b> danh tiếng</div>
+  </header>
+  <div id="game"></div>
+</div>
+<script>
+// ================= SPRITE SVG =================
+function heroSVG(pose){ // idle|attack|hurt|down
+  const armLift=pose==='attack'?-38:0, tilt=pose==='hurt'?7:(pose==='attack'?-4:0), down=pose==='down';
+  return `<svg width="130" height="150" viewBox="0 0 150 170">
+   <g transform="${down?'translate(6,58) rotate(76 75 90)':`rotate(${tilt} 70 90)`}">
+    <path d="M62 130 L58 158 L68 158 L70 130 Z" fill="#5a4633"/>
+    <path d="M78 130 L84 158 L94 158 L86 130 Z" fill="#4a3826"/>
+    <path d="M55 78 Q75 70 90 80 L88 132 Q72 138 58 132 Z" fill="#7a8794"/>
+    <path d="M57 82 L86 84 L85 100 L58 98 Z" fill="#98a6b3"/>
+    <ellipse cx="56" cy="82" rx="9" ry="8" fill="#8b98a5"/><ellipse cx="89" cy="84" rx="9" ry="8" fill="#8b98a5"/>
+    <circle cx="72" cy="58" r="15" fill="#d9b38c"/>
+    <path d="M56 58 Q72 40 88 58 L88 52 Q72 34 56 52 Z" fill="#6b7680"/>
+    <rect x="63" y="55" width="4" height="6" fill="#2a1f18"/><rect x="77" y="55" width="4" height="6" fill="#2a1f18"/>
+    <g transform="rotate(${armLift} 88 88)">
+     <path d="M86 84 L108 96 L104 102 L82 92 Z" fill="#d9b38c"/>
+     <rect x="104" y="94" width="6" height="8" fill="#3a2a1a"/>
+     <path d="M110 88 L150 78 L152 84 L112 100 Z" fill="#dfe8ef" stroke="#9fb0bd"/>
+    </g>
+    <path d="M56 86 L44 104 L52 108 L62 92 Z" fill="#d9b38c"/>
+    <ellipse cx="44" cy="106" rx="13" ry="16" fill="#8a5a3a"/><ellipse cx="44" cy="106" rx="7" ry="9" fill="#b5824f"/>
+   </g></svg>`;
+}
+function wolfSVG(pose){
+  const lunge=pose==='attack'?-14:0, down=pose==='down', dip=pose==='attack'?4:0;
+  return `<svg width="140" height="130" viewBox="0 0 170 150">
+   <g transform="${down?'rotate(72 90 100)':`translate(${lunge},0)`}">
+    <path d="M140 78 Q166 66 160 92 Q156 82 138 88 Z" fill="#63636b"/>
+    <rect x="118" y="104" width="11" height="34" rx="4" fill="#55555b"/><rect x="128" y="106" width="11" height="32" rx="4" fill="#4b4b51"/>
+    <ellipse cx="98" cy="90" rx="40" ry="23" fill="#75757d"/>
+    <path d="M70 74 L74 66 L80 76 L86 66 L92 78 L98 68 L104 80 L110 72 L116 84 L70 90 Z" fill="#63636b"/>
+    <rect x="64" y="104" width="11" height="36" rx="4" fill="#6b6b73"/><rect x="74" y="106" width="11" height="34" rx="4" fill="#5c5c63"/>
+    <path d="M74 84 Q56 86 48 100 L64 106 Q74 96 82 94 Z" fill="#75757d"/>
+    <path d="M60 82 L54 66 L70 78 Z" fill="#5c5c63"/><path d="M72 80 L70 64 L84 78 Z" fill="#5c5c63"/>
+    <path d="M46 92 Q44 78 64 78 Q74 80 74 96 Q64 104 52 102 Z" fill="#7e7e86"/>
+    <g transform="rotate(${dip} 46 98)"><path d="M46 92 L18 96 L20 106 L48 102 Z" fill="#75757d"/>
+     <path d="M18 96 L10 99 L20 106 Z" fill="#4b4b51"/>
+     <path d="M22 103 L20 109 L26 105 Z" fill="#fff"/><path d="M30 104 L29 109 L34 106 Z" fill="#fff"/></g>
+    <ellipse cx="56" cy="90" rx="4" ry="3" fill="#ffcf4a"/><circle cx="57" cy="90" r="1.6" fill="#2a1f10"/>
+   </g></svg>`;
+}
+function guardSVG(pose){
+  const arm=pose==='attack'?-30:0,tilt=pose==='hurt'?7:0,down=pose==='down';
+  return `<svg width="135" height="150" viewBox="0 0 150 170">
+   <g transform="${down?'translate(6,58) rotate(76 75 90)':`rotate(${tilt} 70 90)`}">
+    <path d="M60 128 L56 158 L68 158 L70 128 Z" fill="#3a3f45"/><path d="M80 128 L86 158 L96 158 L88 128 Z" fill="#31363b"/>
+    <path d="M52 76 Q75 66 92 78 L90 132 Q72 140 56 132 Z" fill="#5a636b"/>
+    <path d="M54 80 L90 82 L89 108 L56 106 Z" fill="#6f7a83"/>
+    <ellipse cx="53" cy="80" rx="11" ry="9" fill="#7a858e"/><ellipse cx="92" cy="82" rx="11" ry="9" fill="#7a858e"/>
+    <circle cx="72" cy="56" r="16" fill="#8a939b"/>
+    <rect x="58" y="52" width="28" height="6" fill="#2a2e33"/>
+    <path d="M56 44 Q72 30 88 44 L88 56 L56 56 Z" fill="#6f7a83"/>
+    <g transform="rotate(${arm} 90 86)"><path d="M88 82 L112 92 L108 100 L84 90 Z" fill="#8a939b"/>
+     <rect x="106" y="70" width="8" height="34" rx="2" fill="#c9d2d9"/><rect x="103" y="66" width="14" height="8" fill="#9fb0bd"/></g>
+    <path d="M53 84 L40 102 L48 108 L60 90 Z" fill="#8a939b"/>
+    <rect x="30" y="86" width="20" height="40" rx="5" fill="#4a5259"/><rect x="35" y="94" width="10" height="24" rx="3" fill="#6f7a83"/>
+   </g></svg>`;
+}
+function krakenSVG(pose){
+  const w=pose==='attack'?-10:0,down=pose==='down';
+  return `<svg width="150" height="150" viewBox="0 0 170 160">
+   <g transform="${down?'rotate(70 85 100)':`translate(${w},0)`}">
+    <path d="M40 120 Q30 150 46 148 Q48 132 58 126 Z" fill="#3f6b6f"/>
+    <path d="M70 124 Q66 154 82 150 Q80 134 84 128 Z" fill="#356064"/>
+    <path d="M100 122 Q104 152 118 146 Q108 132 108 126 Z" fill="#3f6b6f"/>
+    <path d="M126 118 Q142 144 148 130 Q134 124 130 120 Z" fill="#356064"/>
+    <ellipse cx="86" cy="94" rx="46" ry="38" fill="#4a7d82"/>
+    <ellipse cx="86" cy="86" rx="38" ry="30" fill="#5b929a"/>
+    <ellipse cx="70" cy="82" rx="8" ry="10" fill="#0a1a1c"/><ellipse cx="104" cy="82" rx="8" ry="10" fill="#0a1a1c"/>
+    <circle cx="72" cy="84" r="3" fill="#9fe8d0"/><circle cx="106" cy="84" r="3" fill="#9fe8d0"/>
+    <path d="M70 108 Q86 118 104 108 L100 114 Q86 120 74 114 Z" fill="#25494c"/>
+    <path d="M60 58 L66 44 L74 60 Z" fill="#4a7d82"/><path d="M98 60 L106 44 L112 58 Z" fill="#4a7d82"/>
+   </g></svg>`;
+}
+function golemSVG(pose){
+  const arm=pose==='attack'?-26:0,tilt=pose==='hurt'?5:0,down=pose==='down';
+  return `<svg width="140" height="155" viewBox="0 0 160 175">
+   <g transform="${down?'translate(6,60) rotate(74 80 90)':`rotate(${tilt} 78 90)`}">
+    <rect x="60" y="130" width="18" height="30" rx="3" fill="#5a5148"/><rect x="86" y="130" width="18" height="30" rx="3" fill="#4d453d"/>
+    <path d="M52 70 L110 66 L114 130 L54 134 Z" fill="#6e6559"/>
+    <path d="M58 76 L104 74 L100 100 L60 100 Z" fill="#837868"/>
+    <rect x="70" y="104" width="26" height="8" fill="#4d453d"/>
+    <path d="M64 44 L104 42 L108 68 L60 70 Z" fill="#7a6f60"/>
+    <rect x="72" y="52" width="9" height="8" fill="#ff8a3c"/><rect x="90" y="52" width="9" height="8" fill="#ff8a3c"/>
+    <g transform="rotate(${arm} 112 80)"><rect x="106" y="72" width="20" height="46" rx="4" fill="#6e6559"/><rect x="102" y="112" width="28" height="20" rx="4" fill="#5a5148"/></g>
+    <rect x="34" y="74" width="20" height="46" rx="4" fill="#6e6559"/><rect x="30" y="114" width="28" height="20" rx="4" fill="#5a5148"/>
+    <path d="M56 70 L60 60 L66 70 Z" fill="#837868"/><path d="M96 68 L102 58 L108 68 Z" fill="#837868"/>
+   </g></svg>`;
+}
+function dragonSVG(pose){
+  const w=pose==='attack'?-12:0,down=pose==='down';
+  return `<svg width="165" height="160" viewBox="0 0 185 165">
+   <g transform="${down?'rotate(68 92 100)':`translate(${w},0)`}">
+    <path d="M150 60 Q184 30 178 80 Q160 66 146 78 Z" fill="#7a2418"/>
+    <path d="M120 74 Q150 40 168 66 Q150 70 138 84 Z" fill="#8c2c1c"/>
+    <ellipse cx="104" cy="96" rx="46" ry="30" fill="#a5341f"/>
+    <path d="M64 96 Q104 76 144 90 L142 100 Q104 90 66 104 Z" fill="#c24326"/>
+    <path d="M74 76 L80 66 L86 78 L92 66 L98 80 L104 68 L110 82 L74 90 Z" fill="#7a2418"/>
+    <rect x="80" y="118" width="12" height="30" rx="4" fill="#8c2c1c"/><rect x="116" y="118" width="12" height="30" rx="4" fill="#7a2418"/>
+    <path d="M64 92 Q46 88 38 100 L52 108 Q64 100 70 100 Z" fill="#a5341f"/>
+    <path d="M46 96 Q30 84 22 96 L34 104 L48 104 Z" fill="#b53c22"/>
+    <path d="M22 96 L10 98 L20 106 Z" fill="#5a1810"/>
+    <ellipse cx="44" cy="92" rx="4" ry="5" fill="#ffd24a"/><circle cx="44" cy="92" r="1.8" fill="#2a1000"/>
+    <path d="M40 74 L36 60 L48 72 Z" fill="#7a2418"/>
+    ${pose==='attack'?'<path d="M20 100 Q4 100 -6 96 L2 104 L-4 110 L8 106 Z" fill="#ffb02e"/><circle cx="4" cy="103" r="5" fill="#ffd24a"/>':''}
+   </g></svg>`;
+}
+const SPRITE={0:wolfSVG,1:guardSVG,2:krakenSVG,3:golemSVG,4:dragonSVG};
+
+// --- quái nhỏ cho map vây ---
+function batSVG(){return `<svg width="46" height="34" viewBox="0 0 70 54"><path d="M35 30 Q10 8 4 26 Q16 24 26 34 Z" fill="#4a3a52"/><path d="M35 30 Q60 8 66 26 Q54 24 44 34 Z" fill="#4a3a52"/><ellipse cx="35" cy="32" rx="11" ry="12" fill="#5c4a66"/><path d="M28 22 L30 14 L34 22 Z" fill="#5c4a66"/><path d="M42 22 L40 14 L36 22 Z" fill="#5c4a66"/><circle cx="31" cy="30" r="2.4" fill="#ff5a5a"/><circle cx="39" cy="30" r="2.4" fill="#ff5a5a"/></svg>`;}
+function slimeSVG_(){return `<svg width="40" height="34" viewBox="0 0 60 52"><path d="M8 46 Q6 20 30 18 Q54 20 52 46 Z" fill="#6fae5a"/><path d="M14 44 Q12 26 30 24 Q48 26 46 44 Z" fill="#8ac96f"/><ellipse cx="23" cy="34" rx="3" ry="4" fill="#1c2a14"/><ellipse cx="37" cy="34" rx="3" ry="4" fill="#1c2a14"/></svg>`;}
+function ratSVG(flip){return `<svg width="48" height="30" viewBox="0 0 72 46"${flip?' style="transform:scaleX(-1)"':''}><path d="M58 30 Q72 28 68 38 Q62 34 56 36 Z" fill="#7a6a5a"/><ellipse cx="38" cy="30" rx="22" ry="13" fill="#8a7a68"/><circle cx="16" cy="28" r="10" fill="#8a7a68"/><circle cx="12" cy="20" r="5" fill="#75655a"/><circle cx="22" cy="18" r="5" fill="#75655a"/><circle cx="10" cy="28" r="2.2" fill="#ff4a4a"/><path d="M4 30 L-2 31 L4 34 Z" fill="#3a2e28"/></svg>`;}
+const MOB_TYPES=[
+  {id:'bat', svg:batSVG,  hp:5, dmg:3, spd:1.6, fly:true},
+  {id:'slime',svg:slimeSVG_,hp:10,dmg:2, spd:0.9, fly:false},
+  {id:'rat', svg:ratSVG,  hp:4, dmg:2, spd:2.1, fly:false},
+];
+
+// ================= THẺ RÈN =================
+const CARD_POOL=[
+ {id:'iron',kind:'mat',step:'Quặng',name:'Sắt',ic:'⛏️',cost:1,d:{hard:2,tough:3,weight:3,rust:0},note:'Nền phổ biến, cân bằng, dễ gỉ.'},
+ {id:'ti',kind:'mat',step:'Quặng',name:'Titan',ic:'🪶',cost:2,d:{hard:2,tough:2,weight:-2,rust:3},note:'Nhẹ, chống ăn mòn, khó rèn.'},
+ {id:'alu',kind:'mat',step:'Quặng',name:'Nhôm',ic:'🥫',cost:1,d:{hard:-1,tough:1,weight:-3,rust:2},note:'Cực nhẹ nhưng mềm.'},
+ {id:'carbon',kind:'proc',step:'Hợp kim',name:'Thêm Carbon',ic:'⚫',cost:1,d:{hard:4,tough:-2,weight:0,rust:0},note:'Sắt→thép: cứng hơn, giòn hơn.'},
+ {id:'chrome',kind:'proc',step:'Hợp kim',name:'Thêm Crom',ic:'✨',cost:2,d:{hard:1,tough:0,weight:0,rust:4},note:'≥10.5% → thép không gỉ.'},
+ {id:'nickel',kind:'proc',step:'Hợp kim',name:'Thêm Niken',ic:'🔩',cost:1,d:{hard:0,tough:3,weight:1,rust:1},note:'Tăng dẻo dai, chịu va đập.'},
+ {id:'quench',kind:'proc',step:'Nhiệt luyện',name:'Tôi',ic:'🧊',cost:1,d:{hard:5,tough:-3,weight:0,rust:0},note:'Nguội nhanh: rất cứng nhưng giòn.'},
+ {id:'temper',kind:'proc',step:'Nhiệt luyện',name:'Ram',ic:'🔥',cost:1,d:{hard:-1,tough:4,weight:0,rust:0},note:'Trả lại dẻo dai sau khi tôi.'},
+ {id:'fold',kind:'proc',step:'Rèn',name:'Gấp lớp',ic:'📐',cost:2,d:{hard:2,tough:2,weight:0,rust:0},note:'Hạt mịn hơn, bền hơn (Hall–Petch).'},
+ {id:'hollow',kind:'proc',step:'Rèn',name:'Rèn rỗng',ic:'🕳️',cost:1,d:{hard:-1,tough:-1,weight:-3,rust:0},note:'Bỏ lõi để nhẹ, đổi lấy độ bền.'},
+ {id:'polish',kind:'proc',step:'Rèn',name:'Đánh bóng',ic:'💠',cost:1,d:{hard:0,tough:0,weight:0,rust:2},note:'Bề mặt nhẵn ít bám ăn mòn.'},
+];
+const SM={hard:{ic:'🗡️',nm:'Độ cứng',role:'→ Sát thương'},tough:{ic:'🛡️',nm:'Dẻo dai',role:'→ Độ bền vũ khí'},
+  weight:{ic:'⚖️',nm:'Trọng lượng',role:'→ Tốc độ (nhẹ=nhanh)'},rust:{ic:'💧',nm:'Chống gỉ',role:'→ Giữ chỉ số'}};
+
+// ================= KẺ ĐỊCH =================
+// armor: giáp cứng làm lưỡi giòn dễ mẻ. hits: số đòn cần chịu. wet: map ẩm.
+// hp đấu sĩ tăng dần theo chặng (xem heroMaxHp) nên chỉ số địch được cân theo đó.
+const FOES=[
+ {face:'🐺',name:'Sói hoang',hp:26,dmg:4,armor:0,wet:false,
+  tip:'Nhanh nhẹn, không giáp. Tốc độ quan trọng — vũ khí nhẹ ra đòn kịp.'},
+ {face:'🛡️',name:'Lính giáp nặng',hp:34,dmg:4,armor:3,wet:false,
+  tip:'Giáp dày. Lưỡi cứng mà giòn sẽ MẺ khi chém giáp — cần dẻo dai.'},
+ {face:'🌊',name:'Thủy quái đầm lầy',hp:34,dmg:5,armor:1,wet:true,
+  tip:'Map ẩm mặn. Thiếu chống gỉ → chỉ số tụt dần giữa trận.'},
+ {face:'🗿',name:'Golem đá',hp:46,dmg:6,armor:4,wet:false,
+  tip:'Giáp dày + đòn mạnh. Cần vừa sát thương vừa cực bền.'},
+ {face:'🐉',name:'Hỏa Long (BOSS)',hp:70,dmg:8,armor:4,wet:false,
+  tip:'Tổng lực. Vũ khí phải cân mọi mặt — không có điểm yếu nào được bỏ.'},
+];
+// máu đấu sĩ tăng theo độ sâu của run: càng về sau càng trụ được lâu hơn
+function heroMaxHp(foeIdx){return 30+7*(foeIdx||0);}
+
+// Chuỗi chặng của run: xen 1 map vây (swarm) vào giữa các trận boss.
+// foe = index trong FOES (với kind 'boss')
+const STAGES=[
+  {kind:'swarm',name:'Vòng vây hầm mộ',survive:22,        // MAP VÂY — chặng mở màn
+   tip:'Bầy quái nhỏ ập vào không nghỉ, càng lâu càng đông. Sống sót 22 giây. Cần ĐỘ CỨNG để chém chết mob (đừng rèn toàn thẻ nhẹ!) và TRỌNG LƯỢNG thấp để chém nhanh.'},
+  {kind:'boss', foe:0},                                   // Sói
+  {kind:'boss', foe:1},                                   // Lính giáp
+  {kind:'boss', foe:2},                                   // Thủy quái
+  {kind:'boss', foe:3},                                   // Golem
+  {kind:'boss', foe:4},                                   // Rồng boss
+];
+const TOTAL_STAGES=STAGES.length;
+
+// ================= SỰ KIỆN =================
+const EVENTS=[
+ {ic:'🔨',t:'Lò rèn hoang',d:'Nung lại vũ khí: +3 độ bền tối đa, nhưng +2 độ cứng khiến hơi giòn.',
+  apply:w=>{w.maxDur+=3;w.dur=w.maxDur;w.hard+=2;w.tough-=1;}},
+ {ic:'🧪',t:'Thương nhân giả kim',d:'Phủ một lớp crom: +4 chống gỉ.',apply:w=>{w.rust+=4;}},
+ {ic:'⚗️',t:'Bí kíp ram cổ',d:'Ram lại toàn diện: +4 dẻo dai, -1 cứng.',apply:w=>{w.tough+=4;w.hard=Math.max(0,w.hard-1);}},
+ {ic:'🪨',t:'Mỏ titan lộ thiên',d:'Rèn rỗng lõi: -3 trọng lượng (nhanh hơn), -1 dẻo dai.',apply:w=>{w.weight-=3;w.tough-=1;}},
+];
+
+// ================= TRẠNG THÁI =================
+let deck=[],hand=[],played=[],forgeStats={},energy=0;
+let weapon=null;          // vũ khí đã rèn cho run: {hard,tough,weight,rust,maxDur,dur}
+let stage=0, rep=0;       // stage 0..4 (5 trận)
+// sự kiện: bốc MỘT lần cho mỗi chặng và ghi nhớ đã dùng chưa,
+// để rèn lại không bốc được sự kiện mới (tránh farm vô hạn).
+let stageEvent=null, stageEventFor=-1, stageEventUsed=false;
+const HAND=5, E0=6;   // 6 năng lượng: đủ chỗ cho một lưỡi cân bằng (quặng + hợp kim + tôi + ram)
+let mapNodes=[];          // các node của run
+
+function newRun(){
+  deck=[];
+  ['iron','iron','carbon','quench','temper','nickel','fold','chrome','alu','hollow'].forEach(id=>deck.push(clone(CARD_POOL.find(c=>c.id===id))));
+  stage=0; rep=0; weapon=null;
+  stageEvent=null; stageEventFor=-1; stageEventUsed=false;
+  forgePhase(true);
+}
+function clone(o){return JSON.parse(JSON.stringify(o));}
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[a[i],a[j]]=[a[j],a[i]];}}
+const $=id=>document.getElementById(id);
+function setHeader(ph){$('stage').textContent=Math.min(stage+1,TOTAL_STAGES);$('phase').textContent=ph;$('rep').textContent=rep;}
+
+// ================= PHA RÈN =================
+function forgePhase(first){
+  forgeStats={hard:0,tough:0,weight:0,rust:0};
+  played=[];energy=E0;
+  shuffle(deck);hand=deck.slice(0,HAND);
+  setHeader('Rèn');
+  renderForge(first);
+}
+function playCard(i){const c=hand[i];if(c.cost>energy)return;energy-=c.cost;
+  for(const k in c.d)forgeStats[k]+=c.d[k];played.push(c);hand.splice(i,1);renderForge();}
+
+function finalizeWeapon(){
+  // tạo vũ khí từ chỉ số rèn. độ bền tối đa = dẻo dai * hệ số
+  const s=forgeStats;
+  weapon={hard:Math.max(0,s.hard),tough:Math.max(0,s.tough),weight:s.weight,rust:Math.max(0,s.rust)};
+  weapon.maxDur=8+weapon.tough*3;   // dẻo dai → độ bền
+  weapon.dur=weapon.maxDur;
+  showMap();
+}
+
+function cardInner(c){
+  let d='';['hard','tough','weight','rust'].forEach(k=>{if(c.d[k])d+=`<span class="delta d-${k}">${SM[k].ic}${c.d[k]>0?'+':''}${c.d[k]}</span>`;});
+  return `<div class="cost">⚡${c.cost}</div><div class="kind">${c.step}</div>
+    <div class="cn">${c.ic} ${c.name}</div><div>${d}</div><div class="note">${c.note}</div>`;
+}
+function renderForge(first){
+  let statH='';['hard','tough','weight','rust'].forEach(k=>{statH+=`<div class="stat ${k}">
+    <div class="ic">${SM[k].ic}</div><div class="num">${forgeStats[k]}</div>
+    <div class="nm">${SM[k].nm}</div><div class="role">${SM[k].role}</div></div>`;});
+  let pipeH=played.length?played.map((c,i)=>`${i>0?'<span class="arrow">→</span>':''}<span class="chip"><span class="step">${c.step}:</span>${c.ic}${c.name}</span>`).join(''):'<span class="empty">Chưa chơi thẻ — chọn nguyên liệu & cách xử lý</span>';
+  let handH='';hand.forEach((c,i)=>{handH+=`<div class="cardx ${c.cost>energy?'disabled':''}" data-i="${i}">${cardInner(c)}</div>`;});
+  const projDur=8+Math.max(0,forgeStats.tough)*3;
+  const nextSt=STAGES[stage];
+  const nextInfo = nextSt.kind==='swarm'
+    ? `⚡ Sắp tới: <b style="color:var(--heat2)">MAP VÂY — ${nextSt.name}</b>. Bầy quái nhỏ ập vào liên tục. Ưu tiên <b>độ cứng</b> (chém chết mob) và <b>trọng lượng thấp</b> (chém nhanh).`
+    : `Sắp tới: <b>${FOES[nextSt.foe].name}</b>. ${FOES[nextSt.foe].tip}`;
+  $('game').innerHTML=`
+    <div class="panel">
+      <div class="tag">Chặng ${stage+1} · Pha rèn</div>
+      <div class="h1">Rèn vũ khí cho trận sắp tới</div>
+      <div class="muted">${first?'Đây là toàn bộ chuẩn bị của bạn. Trong trận, vũ khí tự đánh — bạn chỉ can thiệp khi nó sắp gãy. Nên chỉ số rèn ra <b>quyết định gần như tất cả</b>.<br>':''}
+      💡 ${nextInfo}</div>
+    </div>
+    <div class="stats">${statH}</div>
+    <div class="muted center" style="margin:-4px 0 8px">🔧 Độ bền dự kiến của vũ khí: <b style="color:var(--dur)">${projDur}</b> (từ dẻo dai)</div>
+    <div class="pipe">${pipeH}</div>
+    <div class="energy">⚡ Năng lượng lò: <b>${energy}</b>/${E0} · hết thì đúc vũ khí</div>
+    <div class="hand">${handH}</div>
+    <div class="actions">
+      <button class="btn primary full" id="done">🗡️ Đúc vũ khí & ra bản đồ</button>
+    </div>`;
+  document.querySelectorAll('.cardx[data-i]').forEach(el=>{if(!el.classList.contains('disabled'))el.onclick=()=>playCard(+el.dataset.i);});
+  $('done').onclick=()=>{if(played.length===0){alert('Chơi ít nhất 1 thẻ nguyên liệu trước.');return;}finalizeWeapon();};
+}
+
+// ================= BẢN ĐỒ =================
+function showMap(){
+  setHeader('Bản đồ');
+  const st=STAGES[stage];
+  const isSwarm = st.kind==='swarm';
+  const foe = isSwarm? null : FOES[st.foe];
+  let evH='';
+  if(stage>0){
+    // chỉ bốc sự kiện MỘT lần cho mỗi chặng; rèn lại quay về đây vẫn thấy đúng sự kiện đó
+    if(stageEventFor!==stage){
+      stageEventFor=stage;
+      stageEvent=EVENTS[Math.floor(Math.random()*EVENTS.length)];
+      stageEventUsed=false;
+    }
+    const ev=stageEvent;
+    evH=`<div class="node ${stageEventUsed?'done':''}" id="evNode">
+      <div class="nic">${ev.ic}</div>
+      <div><div class="nt">${ev.t}</div><div class="nd">${ev.d}</div></div>
+      <div class="diff">${stageEventUsed?'Đã dùng':'Sự kiện<br>(tùy chọn)'}</div></div>`;
+  }
+
+  const foeNodeH = isSwarm
+    ? `<div class="node" id="foeNode">
+         <div class="nic">🦇</div>
+         <div><div class="nt">${st.name} <span style="color:var(--heat2);font-size:11px">⚡ MAP VÂY</span></div><div class="nd">💡 ${st.tip}</div></div>
+         <div class="diff">Sống sót<br>${st.survive}s</div></div>`
+    : `<div class="node" id="foeNode">
+         <div class="nic">${foe.face}</div>
+         <div><div class="nt">${foe.name}</div><div class="nd">💡 ${foe.tip}</div></div>
+         <div class="diff">❤️${foe.hp} · ⚔️${foe.dmg}<br>🛡️giáp ${foe.armor}</div></div>`;
+
+  $('game').innerHTML=`
+    <div class="panel">
+      <div class="tag">Chặng ${stage+1}/${TOTAL_STAGES}</div>
+      <div class="h1">Đường tới trận đấu</div>
+      <div class="muted">Vũ khí hiện tại: 🗡️${weapon.hard} 🛡️${weapon.tough} ⚖️${weapon.weight} 💧${weapon.rust} · 🔧 độ bền ${weapon.dur}/${weapon.maxDur}</div>
+    </div>
+    <div class="map">
+      ${evH}
+      ${foeNodeH}
+    </div>
+    <div class="actions">
+      <button class="btn ghost" id="reforge">↺ Rèn lại vũ khí</button>
+    </div>`;
+  if(stageEvent && !stageEventUsed && $('evNode')){
+    $('evNode').onclick=()=>{
+      stageEvent.apply(weapon);
+      weapon.dur=Math.min(weapon.dur,weapon.maxDur);
+      stageEventUsed=true;
+      showMap();
+    };
+  }
+  $('foeNode').onclick=()=> isSwarm ? startSwarm(st) : startBattle(foe, st.foe);
+  $('reforge').onclick=()=>forgePhase(false);
+}
+
+// ================= AUTO-BATTLE =================
+let battle=null;
+function startBattle(foe, foeIdx){
+  setHeader('Chiến');
+  if(foeIdx==null)foeIdx=FOES.indexOf(foe);
+  const maxHp=heroMaxHp(foeIdx);
+  battle={
+    foe:clone(foe), foeHp:foe.hp,
+    sprite:SPRITE[foeIdx]||wolfSVG, // sprite theo KẺ ĐỊCH, không theo số chặng
+    w:clone(weapon),               // bản sao để trận này chỉnh mà không phá gốc vĩnh viễn
+    playerHp:maxHp, maxHp,
+    log:[], running:true, over:false, turn:0,
+    cd:{repair:0,brace:0,surge:0}, // cooldown action
+    braced:0,                      // số lượt còn hiệu lực thủ
+  };
+  renderBattle();
+  battle.timer=setInterval(tickBattle,1700);
+}
+function bLog(txt,cls){battle.log.push({txt,cls});if(battle.log.length>40)battle.log.shift();}
+
+// ---- hoạt hình ----
+function animHero(pose){const el=$('heroActor');if(!el)return;el.innerHTML=heroSVG(pose);}
+function animFoe(pose){const el=$('foeActor');if(!el)return;el.innerHTML=battle.sprite(pose);}
+function lunge(who,on){const el=$(who==='hero'?'heroActor':'foeActor');if(!el)return;
+  el.classList.toggle(who==='hero'?'lungeL':'lungeR',on);}
+function shake(who){const el=$(who==='hero'?'heroActor':'foeActor');if(!el)return;
+  el.classList.remove('hit');void el.offsetWidth;el.classList.add('hit');}
+function popText(who,txt,color){const box=$('stageBox');if(!box)return;
+  const d=document.createElement('div');d.className='dmgpop';d.textContent=txt;d.style.color=color;
+  d.style.bottom='120px';d.style[who==='hero'?'right':'left']='30%';box.appendChild(d);
+  setTimeout(()=>d.remove(),720);}
+function sparkAt(who,em){const box=$('stageBox');if(!box)return;
+  const s=document.createElement('div');s.className='spark';s.textContent=em;
+  s.style.bottom='90px';s.style[who==='hero'?'right':'left']='34%';box.appendChild(s);
+  setTimeout(()=>s.remove(),520);}
+// diễn một cú chém của người: lao tới → chém → địch rung → lùi
+function playHeroClash(dmg,sparkEm){
+  animHero('attack');lunge('hero',true);
+  setTimeout(()=>{shake('foe');popText('foe','-'+dmg,'#ff8a5c');if(sparkEm)sparkAt('foe',sparkEm);},180);
+  setTimeout(()=>{lunge('hero',false);animHero(battle.w.broken?'hurt':'idle');},420);
+}
+function playFoeClash(dmg){
+  animFoe('attack');lunge('foe',true);
+  setTimeout(()=>{shake('hero');popText('hero','-'+dmg,'#e0574f');},180);
+  setTimeout(()=>{lunge('foe',false);animFoe('idle');},420);
+}
+
+function playerAtk(){
+  const w=battle.w, foe=battle.foe;
+  let dmg=Math.max(1, w.hard - foe.armor);
+  if(battle.surgeActive){dmg=Math.round(dmg*1.6);battle.surgeActive=false;}
+  battle.foeHp-=dmg;
+  bLog(`🗡️ Vũ khí chém ${foe.name} (-${dmg} máu địch)`, 'hit');
+  let wear=1, spark='💢';
+  if(foe.armor>0){
+    const brittle = w.hard - w.tough;
+    if(brittle>3){wear=3;spark='⚡';bLog(`   ⚠️ Lưỡi giòn va giáp cứng — MẺ mạnh (-${wear} bền)`,'warn');}
+    else if(foe.armor>=w.tough){wear=2;spark='✨';bLog(`   ⚠️ Giáp bào mòn lưỡi (-${wear} bền)`,'warn');}
+  }
+  if(battle.braced>0){wear=Math.max(1,wear-1);}
+  w.dur-=wear;
+  return {dmg, spark};
+}
+function foeAtk(){
+  const foe=battle.foe;let d=foe.dmg;
+  if(battle.braced>0){d=Math.round(d*0.5);}
+  battle.playerHp-=d;
+  bLog(`${foe.name} phản đòn (-${d} máu bạn)${battle.braced>0?' [đã thủ]':''}`, 'hit');
+  return d;
+}
+function wetTick(){
+  if(battle.foe.wet && battle.w.rust<4 && battle.turn%2===0){
+    battle.w.hard=Math.max(0,battle.w.hard-1);
+    bLog('💧 Nước mặn ăn mòn — độ cứng vũ khí tụt 1','bad');
+  }
+}
+function checkBreak(){
+  const w=battle.w;
+  if(w.dur<=0 && !w.broken){
+    w.broken=true;
+    // gãy = tụt chỉ số mạnh, vẫn dùng được (theo ý bạn)
+    w.hard=Math.max(1,Math.round(w.hard*0.4));
+    bLog('💥 VŨ KHÍ GÃY! Chỉ còn dùng được phần cán — sát thương tụt mạnh. Sửa nóng gấp!','bad');
+  }
+}
+// Phân định kết quả NGAY khi máu về 0, rồi mới diễn hoạt hình.
+// Đặt running=false lập tức để các pha đang hẹn giờ (đòn phụ / phản đòn) tự huỷ,
+// tránh trường hợp vừa thắng vừa thua và hiện hai modal chồng nhau.
+function decide(win){
+  if(battle.over)return;
+  battle.over=true; battle.running=false; clearInterval(battle.timer);
+  setTimeout(()=>{win?animFoe('down'):animHero('down');},200);
+  setTimeout(()=>endBattle(win),650);
+}
+function tickBattle(){
+  if(!battle.running)return;
+  battle.turn++;
+  for(const k in battle.cd)if(battle.cd[k]>0)battle.cd[k]--;
+  const fast = battle.w.weight<=2;
+  wetTick();
+
+  // --- pha 1: người chém ---
+  const dmg=playerAtk();
+  renderBattle();
+  playHeroClash(dmg.dmg, dmg.spark);
+  checkBreak();
+  if(battle.foeHp<=0){decide(true);return;}
+
+  // --- pha 2: đòn phụ nếu nhẹ ---
+  if(fast && battle.turn%2===0){
+    setTimeout(()=>{ if(!battle.running)return;
+      bLog('   ⚡ Vũ khí nhẹ — ra đòn thêm lần nữa!','good');
+      const d2=playerAtk();renderBattle();playHeroClash(d2.dmg,d2.spark);
+      if(battle.foeHp<=0){decide(true);}
+    },520);
+  }
+
+  // --- pha 3: địch phản đòn ---
+  setTimeout(()=>{ if(!battle.running)return;
+    const fd=foeAtk();renderBattle();playFoeClash(fd);
+    if(battle.playerHp<=0){decide(false);return;}
+    if(battle.braced>0)battle.braced--;
+    renderBattle();
+  }, fast?780:560);
+}
+
+function doAction(a){
+  if(!battle.running)return;            // trận đã phân định thì không can thiệp nữa
+  const c=battle.cd;
+  if(a==='repair'){if(c.repair>0)return;
+    battle.w.dur=Math.min(battle.w.maxDur,battle.w.dur+4);
+    if(battle.w.broken && battle.w.dur>battle.w.maxDur*0.5){battle.w.broken=false;bLog('🔧 Hàn lại lưỡi — vũ khí dùng lại được (chỉ số vẫn giảm).','good');}
+    else bLog('🔧 Sửa nóng: +4 độ bền. (Lưu ý: nung lại nhiều lần làm thép giòn dần)','good');
+    battle.w.hard+=1; // nung lại → giòn hơn chút
+    c.repair=4;
+  }
+  if(a==='brace'){if(c.brace>0)return;battle.braced=2;bLog('🛡️ Thủ thế 2 lượt: giảm sát thương nhận & hao bền.','good');c.brace=3;}
+  if(a==='surge'){if(c.surge>0)return;battle.surgeActive=true;bLog('⚡ Dồn lực: đòn tới +60% sát thương nhưng hao bền thêm.','warn');battle.w.dur-=1;c.surge=3;}
+  renderBattle();
+}
+
+function bar(cls,val,max){const p=Math.max(0,Math.min(100,val/max*100));return `<div class="bar ${cls}"><i style="width:${p}%"></i></div>`;}
+function renderBattle(){
+  const b=battle,w=b.w,f=b.foe;
+  const brittle=w.hard-w.tough;
+  $('game').innerHTML=`
+    <div class="panel">
+      <div class="tag">Chặng ${stage+1} · Tự động chiến đấu</div>
+      <div class="h1">${f.name} <span style="color:var(--dim);font-size:13px">— vũ khí tự đánh, bạn ứng cứu</span></div>
+    </div>
+    <div class="stage" id="stageBox">
+      <div class="ground"></div>
+      <div class="actor hero" id="heroActor">${heroSVG(w.broken?'hurt':'idle')}</div>
+      <div class="actor foe" id="foeActor">${b.sprite('idle')}</div>
+    </div>
+    <div class="arena" style="grid-template-columns:1fr 1fr">
+      <div class="fighter">
+        <div class="fname">🗡️ Vũ khí của bạn ${w.broken?'💥(gãy)':''}</div>
+        <div class="barlbl"><span>❤️ Máu đấu sĩ</span><span>${Math.max(0,b.playerHp)}/${b.maxHp}</span></div>${bar('hp',b.playerHp,b.maxHp)}
+        <div class="barlbl"><span>🔧 Độ bền vũ khí</span><span>${Math.max(0,w.dur)}/${w.maxDur}</span></div>${bar('dur',w.dur,w.maxDur)}
+        <div class="muted" style="margin-top:6px;font-size:11px">🗡️${w.hard} 🛡️${w.tough} ⚖️${w.weight} 💧${w.rust}
+        ${brittle>3?'<br><span style="color:var(--fail)">⚠️ Giòn: cứng cao, dẻo dai thấp</span>':''}</div>
+      </div>
+      <div class="fighter">
+        <div class="fname">${f.name}</div>
+        <div class="barlbl"><span>❤️ Máu địch</span><span>${Math.max(0,b.foeHp)}/${f.hp}</span></div>${bar('foe',b.foeHp,f.hp)}
+        <div class="muted" style="margin-top:6px;font-size:11px">⚔️ sát thương ${f.dmg} · 🛡️ giáp ${f.armor}${f.wet?' · 💧 map ẩm':''}</div>
+      </div>
+    </div>
+    <div class="log" id="log">${b.log.map(l=>`<div class="ln ${l.cls}">${l.txt}</div>`).join('')}</div>
+    <div class="muted center" style="font-size:11px">Can thiệp (có hồi chiêu):</div>
+    <div class="interv">
+      <div class="iv ${b.cd.repair>0?'disabled':''}" data-a="repair"><div class="ivic">🔧</div><div class="ivn">Sửa nóng</div><div class="ivd">+4 độ bền, cứu vũ khí gãy</div>${b.cd.repair>0?`<div class="cd">hồi ${b.cd.repair}</div>`:''}</div>
+      <div class="iv ${b.cd.brace>0?'disabled':''}" data-a="brace"><div class="ivic">🛡️</div><div class="ivn">Thủ thế</div><div class="ivd">2 lượt giảm sát thương & hao bền</div>${b.cd.brace>0?`<div class="cd">hồi ${b.cd.brace}</div>`:''}</div>
+      <div class="iv ${b.cd.surge>0?'disabled':''}" data-a="surge"><div class="ivic">⚡</div><div class="ivn">Dồn lực</div><div class="ivd">Đòn tới +60% dmg, hao bền</div>${b.cd.surge>0?`<div class="cd">hồi ${b.cd.surge}</div>`:''}</div>
+    </div>`;
+  const lg=$('log');if(lg)lg.scrollTop=lg.scrollHeight;
+  document.querySelectorAll('.iv[data-a]').forEach(el=>{if(!el.classList.contains('disabled'))el.onclick=()=>doAction(el.dataset.a);});
+}
+
+function endBattle(win){
+  if(battle._ended)return;              // chỉ được kết thúc đúng một lần
+  battle._ended=true;
+  battle.running=false;clearInterval(battle.timer);
+  const f=battle.foe,w=battle.w;
+  let lesson;
+  if(win){
+    if(f.armor>=5) lesson={t:'Dẻo dai đánh bại giáp',x:'Trước giáp dày, <b>độ dẻo dai</b> giữ cho lưỡi không mẻ quan trọng hơn độ cứng thô. Vũ khí quá cứng mà giòn sẽ tự hủy trước khi hạ được mục tiêu.'};
+    else if(w.weight<=2) lesson={t:'Nhẹ là nhanh',x:'Vũ khí nhẹ ra đòn dồn dập — <b>trọng lượng thấp</b> đổi được nhiều lượt tấn công hơn, bù cho sát thương mỗi đòn thấp hơn.'};
+    else lesson={t:'Cân bằng thắng thế',x:'Một lưỡi được <b>tôi rồi ram</b> có cả độ cứng lẫn dẻo dai — đó là công thức của gần như mọi lưỡi thép tốt trong lịch sử.'};
+  } else {
+    if(w.broken) lesson={t:'Vì sao nó gãy',x:'Độ bền vũ khí đến từ <b>độ dẻo dai</b>, không phải độ cứng. Lưỡi tôi cứng mà thiếu ram sẽ tích ứng suất và nứt. Lần sau: thêm <b>Ram</b> hoặc <b>Niken</b>, hoặc gấp lớp để hạt mịn hơn.'};
+    else lesson={t:'Chưa đủ lực',x:'Vũ khí bền nhưng thiếu <b>độ cứng</b> nên không xuyên nổi giáp/máu địch kịp. Cần thêm <b>Carbon + Tôi</b> — rồi ram lại để khỏi giòn.'};
+  }
+  const ov=document.createElement('div');ov.className='overlay';
+  ov.innerHTML=`<div class="modal">
+    <div class="big">${win?'🏆':'☠️'}</div>
+    <h2 style="color:${win?'var(--pass)':'var(--fail)'}">${win?'HẠ GỤC '+f.name.toUpperCase():'BẠN GỤC NGÃ'}</h2>
+    <div class="muted">${win? (stage>=TOTAL_STAGES-1?'Bạn đã sống sót toàn bộ hành trình!':'Vũ khí trụ vững. Đi tiếp.') : 'Vũ khí không đủ cho trận này.'}</div>
+    <div class="lesson">📚 <b>${lesson.t}.</b> ${lesson.x}</div>
+    <button class="btn primary full" id="cont">${win? (stage>=TOTAL_STAGES-1?'🎉 Xem kết quả':'Chặng tiếp →') : '↺ Bắt đầu run mới'}</button>
+  </div>`;
+  document.body.appendChild(ov);
+  $('cont').onclick=()=>{
+    ov.remove();
+    if(!win){newRun();return;}
+    rep+=15;
+    // vũ khí mang sang chặng sau: giữ chỉ số, hồi 1 phần độ bền
+    weapon.hard=w.hard;weapon.tough=w.tough;weapon.weight=w.weight;weapon.rust=w.rust;
+    weapon.broken=false;weapon.dur=Math.min(weapon.maxDur,w.dur+Math.round(weapon.maxDur*0.4));
+    stage++;
+    if(stage>=TOTAL_STAGES) showRunWin();
+    else showMap();
+  };
+}
+
+// ================= MAP VÂY (SWARM) — Vampire-Survivors style =================
+// Toạ độ sân: x,y theo % (0..100). Nhân vật di chuyển tự do, quái đuổi theo,
+// vũ khí tự chém mọi quái trong bán kính quanh nhân vật.
+let swarm=null;
+function startSwarm(st){
+  setHeader('Vây');
+  swarm={
+    st, w:clone(weapon), hp:30,
+    mobs:[], nextId:0,
+    hx:50, hy:50,                  // vị trí nhân vật (%)
+    facing:1,                      // hướng nhìn (1 phải, -1 trái)
+    keys:{}, moveVec:{x:0,y:0},    // phím đang giữ + vector nút cảm ứng
+    t:0, dur:st.survive, kills:0,
+    spawnTimer:0, spawnGap:1.2,
+    atkTimer:0,
+    last:performance.now(), running:true,
+  };
+  renderSwarmShell();
+  bindSwarmControls();
+  swarm.raf=requestAnimationFrame(swarmLoop);
+}
+
+// tốc độ di chuyển nhân vật: nhẹ = nhanh hơn
+function heroSpeed(){ return 26 - swarm.w.weight*1.3; }      // %/giây
+// nhịp auto-chém: nhẹ = nhanh (chém thường xuyên hơn để không trượt)
+function swingInterval(){ return Math.max(0.25, 0.55 + swarm.w.weight*0.04); }
+// bán kính chém quanh nhân vật (theo %): cứng = rộng hơn
+function swingRadius(){ return 10 + Math.max(0,swarm.w.hard)*0.7; }
+function swingDamage(){ return Math.max(1, Math.round(swarm.w.hard*0.9)); }
+
+function spawnMob(){
+  const type=MOB_TYPES[Math.floor(Math.random()*MOB_TYPES.length)];
+  // spawn ở rìa sân, hướng nào cũng được
+  const edge=Math.floor(Math.random()*4);
+  let x,y;
+  if(edge===0){x=Math.random()*100;y=-6;}
+  else if(edge===1){x=106;y=Math.random()*100;}
+  else if(edge===2){x=Math.random()*100;y=106;}
+  else {x=-6;y=Math.random()*100;}
+  swarm.mobs.push({id:swarm.nextId++, type, x, y, hp:type.hp, dead:false, wob:Math.random()*6.28, hitFlash:0});
+}
+
+function dist(ax,ay,bx,by){const dx=ax-bx,dy=ay-by;return Math.sqrt(dx*dx+dy*dy);}
+
+function swarmSwing(){
+  const R=swingRadius(), dmg=swingDamage();
+  let hitAny=false;
+  swarm.mobs.forEach(m=>{
+    if(m.dead)return;
+    if(dist(m.x,m.y,swarm.hx,swarm.hy) < R){
+      m.hp-=dmg; m.hitFlash=0.15; hitAny=true;
+      spawnDpop(m.x,m.y,dmg);
+      if(m.hp<=0){m.dead=true;m._die=0.3;swarm.kills++;}
+    }
+  });
+  // hao độ bền
+  let wear=0.5;
+  const near=swarm.mobs.filter(m=>!m.dead && dist(m.x,m.y,swarm.hx,swarm.hy)<R+6).length;
+  if(near>4) wear+=0.4;
+  if(swarm.w.hard - swarm.w.tough > 3) wear*=1.5;   // giòn → mẻ nhanh
+  swarm.w.dur-=wear;
+  if(swarm.w.dur<=0){swarm.w.dur=0;if(!swarm.w.broken){swarm.w.broken=true;swarm.w.hard=Math.max(1,Math.round(swarm.w.hard*0.4));}}
+  // hiệu ứng aura + vung kiếm
+  const hero=$('heroU'); if(hero){hero.classList.remove('swing');void hero.offsetWidth;hero.classList.add('swing');}
+  const aura=$('auraEl'); if(aura){aura.classList.remove('flash');void aura.offsetWidth;aura.classList.add('flash');}
+}
+function spawnDpop(x,y,d){
+  const f=$('swField');if(!f)return;
+  const el=document.createElement('div');el.className='dpop';el.textContent='-'+d;
+  el.style.left=x+'%';el.style.top=y+'%';f.appendChild(el);
+  setTimeout(()=>el.remove(),600);
+}
+
+function swarmLoop(now){
+  if(!swarm||!swarm.running)return;
+  const dt=Math.min(0.05,(now-swarm.last)/1000); swarm.last=now;
+  swarm.t+=dt;
+  const remain=Math.max(0,swarm.dur-swarm.t);
+
+  // ---- di chuyển nhân vật ----
+  let vx=0,vy=0;
+  const k=swarm.keys;
+  if(k['w']||k['arrowup'])vy-=1;
+  if(k['s']||k['arrowdown'])vy+=1;
+  if(k['a']||k['arrowleft'])vx-=1;
+  if(k['d']||k['arrowright'])vx+=1;
+  vx+=swarm.moveVec.x; vy+=swarm.moveVec.y;
+  const mag=Math.hypot(vx,vy);
+  if(mag>0){
+    vx/=mag; vy/=mag;
+    const sp=heroSpeed()*dt;
+    swarm.hx=Math.max(4,Math.min(96,swarm.hx+vx*sp));
+    swarm.hy=Math.max(8,Math.min(92,swarm.hy+vy*sp));
+    if(vx!==0)swarm.facing=vx>0?1:-1;
+  }
+
+  // ---- spawn ----
+  swarm.spawnTimer-=dt;
+  swarm.spawnGap=Math.max(0.35, 0.95 - swarm.t*0.022);
+  const alive=swarm.mobs.filter(m=>!m.dead).length;
+  if(swarm.spawnTimer<=0 && alive<24){ spawnMob(); if(swarm.t>6&&alive<18&&Math.random()<0.7)spawnMob(); swarm.spawnTimer=swarm.spawnGap; }
+
+  // ---- auto-chém ----
+  swarm.atkTimer-=dt;
+  if(swarm.atkTimer<=0){ swarmSwing(); swarm.atkTimer=swingInterval(); }
+
+  // ---- quái đuổi theo nhân vật ----
+  const spd=swarm.w.broken?1.1:1;
+  swarm.mobs.forEach(m=>{
+    if(m.dead){ if(m._die!=null){m._die-=dt; if(m._die<=0)m._gone=true;} return; }
+    if(m.hitFlash>0)m.hitFlash-=dt;
+    const dx=swarm.hx-m.x, dy=swarm.hy-m.y, d=Math.hypot(dx,dy)||1;
+    const v=m.type.spd*5.5*spd*dt;
+    m.x+=dx/d*v; m.y+=dy/d*v;
+    if(m.type.fly)m.wob+=dt*6;
+    // chạm nhân vật → gây damage rồi biến mất
+    if(d<4.5){ swarm.hp-=m.type.dmg; m.dead=true; m._die=0.2; }
+  });
+  swarm.mobs=swarm.mobs.filter(m=>!m._gone);
+
+  renderSwarmFrame(remain);
+  if(swarm.hp<=0){ endSwarm(false); return; }
+  if(remain<=0){ endSwarm(true); return; }
+  swarm.raf=requestAnimationFrame(swarmLoop);
+}
+
+function renderSwarmShell(){
+  const w=swarm.w;
+  $('game').innerHTML=`
+    <div class="panel">
+      <div class="tag">Chặng ${stage+1} · Map vây ⚡</div>
+      <div class="h1">${swarm.st.name} <span style="color:var(--dim);font-size:13px">— chạy né, vũ khí tự chém quanh bạn</span></div>
+    </div>
+    <div class="swarm" id="swarmBox">
+      <div class="field" id="swField">
+        <div class="swarm-hud">
+          <span class="box time">⏳ <span id="sTime">${swarm.dur}</span>s</span>
+          <span class="box hp">❤️ <span id="sHp">${swarm.hp}</span></span>
+          <span class="box dur">🔧 <span id="sDur">${Math.max(0,Math.round(w.dur))}</span>/${w.maxDur}</span>
+          <span class="box kills">💀 <span id="sKills">0</span></span>
+        </div>
+        <div class="aura" id="auraEl"></div>
+        <div class="unit hero-u" id="heroU">${heroSVG('idle')}</div>
+        <div class="swarm-tip">Dùng <b>WASD</b> / phím mũi tên (hoặc nút bên dưới) để né · vũ khí tự chém</div>
+      </div>
+    </div>
+    <div class="dpad">
+      <button class="up" data-dir="up">▲</button>
+      <button class="left" data-dir="left">◀</button>
+      <span class="mid">di<br>chuyển</span>
+      <button class="right" data-dir="right">▶</button>
+      <button class="down" data-dir="down">▼</button>
+    </div>
+    <div class="muted center" style="font-size:11.5px;margin-top:8px">
+      🗡️${w.hard} cứng → sát thương & bán kính chém · ⚖️${w.weight} nhẹ → chạy & chém nhanh · 🛡️${w.tough} dẻo dai → bền lâu
+    </div>`;
+}
+
+function bindSwarmControls(){
+  // bàn phím
+  swarm._kd=(e)=>{const key=e.key.toLowerCase(); if(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'].includes(key)){swarm.keys[key]=true;e.preventDefault();}};
+  swarm._ku=(e)=>{const key=e.key.toLowerCase(); swarm.keys[key]=false;};
+  window.addEventListener('keydown',swarm._kd);
+  window.addEventListener('keyup',swarm._ku);
+  // nút cảm ứng: giữ để đi
+  const dirVec={up:{x:0,y:-1},down:{x:0,y:1},left:{x:-1,y:0},right:{x:1,y:0}};
+  document.querySelectorAll('.dpad button[data-dir]').forEach(btn=>{
+    const dir=btn.dataset.dir;
+    const on=(e)=>{e.preventDefault();swarm.moveVec=dirVec[dir];};
+    const off=(e)=>{e.preventDefault();swarm.moveVec={x:0,y:0};};
+    btn.addEventListener('pointerdown',on);
+    btn.addEventListener('pointerup',off);
+    btn.addEventListener('pointerleave',off);
+    btn.addEventListener('pointercancel',off);
+  });
+}
+function unbindSwarmControls(){
+  if(swarm._kd)window.removeEventListener('keydown',swarm._kd);
+  if(swarm._ku)window.removeEventListener('keyup',swarm._ku);
+}
+
+function renderSwarmFrame(remain){
+  const f=$('swField');if(!f)return;
+  $('sTime').textContent=Math.ceil(remain);
+  $('sHp').textContent=Math.max(0,swarm.hp);
+  $('sDur').textContent=Math.max(0,Math.round(swarm.w.dur));
+  $('sKills').textContent=swarm.kills;
+  // nhân vật
+  const hero=$('heroU');
+  if(hero){
+    hero.style.left=swarm.hx+'%'; hero.style.top=swarm.hy+'%';
+    hero.style.transform=`translate(-50%,-50%) scaleX(${swarm.facing})`;
+    if(swarm.w.broken && !hero._broken){hero._broken=true;hero.innerHTML=heroSVG('hurt');}
+  }
+  // aura (bán kính chém) — quy đổi % sang px theo bề rộng sân
+  const aura=$('auraEl');
+  if(aura){
+    const box=$('swarmBox'); const wpx=box?box.clientWidth:560; const hpx=box?box.clientHeight:360;
+    const rx=swingRadius()/100*wpx*2;  // đường kính px ngang
+    aura.style.left=swarm.hx+'%'; aura.style.top=swarm.hy+'%';
+    aura.style.width=rx+'px'; aura.style.height=(swingRadius()/100*hpx*2)+'px';
+  }
+  // mob layer
+  let layer=f.querySelector('.moblayer');
+  if(!layer){layer=document.createElement('div');layer.className='moblayer';layer.style.position='absolute';layer.style.inset='0';f.appendChild(layer);}
+  layer.innerHTML=swarm.mobs.map(m=>{
+    const flip = (swarm.hx - m.x) < 0;   // quay mặt về phía nhân vật
+    const svg = m.type.id==='rat'? m.type.svg(flip) : `<span style="display:inline-block;transform:scaleX(${flip?-1:1})">${m.type.svg()}</span>`;
+    const dScale = m.dead? 'scale(.4)' : '';
+    const fl = m.hitFlash>0? 'filter:brightness(2)':'';
+    return `<div class="unit mob-u ${m.dead?'dead':''}" style="left:${m.x}%;top:${m.y}%;${fl}">${svg}</div>`;
+  }).join('');
+}
+
+function endSwarm(win){
+  swarm.running=false;cancelAnimationFrame(swarm.raf);
+  unbindSwarmControls();
+  const w=swarm.w;
+  let lesson;
+  if(win){
+    if(w.weight<=2) lesson={t:'Nhẹ để chạy và chém',x:'Vũ khí <b>nhẹ</b> cho bạn vừa chạy nhanh né bầy quái vừa chém liền tay. Trong hỗn chiến, cơ động là sống còn.'};
+    else if(w.hard>=8) lesson={t:'Bán kính chém rộng',x:'Lưỡi <b>cứng và sắc</b> quét vòng rộng quanh bạn — càng nhiều quái lọt vào bán kính, càng dọn nhanh.'};
+    else lesson={t:'Bền bỉ thắng số đông',x:'Sống giữa bầy đàn là bài toán của <b>độ bền</b> — vũ khí đủ dẻo dai không mẻ dù chém liên hồi.'};
+  } else {
+    if(w.broken) lesson={t:'Gãy giữa vòng vây',x:'Chém liên hồi bào mòn lưỡi rất nhanh, nhất là khi <b>giòn</b> (cứng cao, dẻo dai thấp). Map vây trừng phạt thiếu <b>độ dẻo dai</b> nặng hơn trận tay đôi.'};
+    else lesson={t:'Bị vây bắt',x:'Vũ khí <b>nặng</b> làm bạn chạy chậm và chém chậm — bầy quái dồn tới. Giảm <b>trọng lượng</b> (titan, rèn rỗng) để cơ động hơn.'};
+  }
+  const ov=document.createElement('div');ov.className='overlay';
+  ov.innerHTML=`<div class="modal">
+    <div class="big">${win?'🎊':'☠️'}</div>
+    <h2 style="color:${win?'var(--pass)':'var(--fail)'}">${win?'SỐNG SÓT VÒNG VÂY':'BỊ ĐÁNH GỤC'}</h2>
+    <div class="muted">${win?`Hạ ${swarm.kills} con, trụ hết giờ.`:`Trụ được ${Math.floor(swarm.t)}s, hạ ${swarm.kills} con.`}</div>
+    <div class="lesson">📚 <b>${lesson.t}.</b> ${lesson.x}</div>
+    <button class="btn primary full" id="cont">${win?'Chặng tiếp →':'↺ Bắt đầu run mới'}</button>
+  </div>`;
+  document.body.appendChild(ov);
+  $('cont').onclick=()=>{
+    ov.remove();
+    if(!win){newRun();return;}
+    rep+=15;
+    weapon.hard=w.hard;weapon.tough=w.tough;weapon.weight=w.weight;weapon.rust=w.rust;
+    weapon.broken=false;weapon.dur=Math.min(weapon.maxDur,Math.round(w.dur)+Math.round(weapon.maxDur*0.4));
+    stage++;
+    if(stage>=TOTAL_STAGES) showRunWin();
+    else showMap();
+  };
+}
+
+function showRunWin(){
+  setHeader('Xong');
+  $('game').innerHTML=`<div class="panel center" style="padding:34px 18px">
+    <div style="font-size:60px">👑</div>
+    <div class="h1" style="font-size:24px">Sống sót toàn bộ hành trình!</div>
+    <div class="muted" style="max-width:440px;margin:8px auto 0">Từ bầy quái hầm mộ tới Hỏa Long, vũ khí của bạn không gục — bạn đã cân được cứng, dẻo dai, nhẹ và chống gỉ qua mọi loại kẻ thù. Đúng tay nghề thợ rèn. Danh tiếng: <b style="color:var(--gold)">${rep}</b>.</div>
+    <button class="btn primary" style="width:auto;padding:12px 28px;margin-top:18px" onclick="newRun()">↻ Run mới</button>
+  </div>`;
+}
+
+newRun();
+</script>
+</body>
+</html>

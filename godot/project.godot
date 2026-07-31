@@ -1,0 +1,21 @@
+; Project THỬ LỬA — bản 2.5D isometric
+; Chỉnh trong editor thì Godot sẽ ghi đè file này, cứ thoải mái sửa.
+
+config_version=5
+
+[application]
+
+config/name="Thử Lửa — Isometric"
+config/description="Map vây isometric 2.5D. Sprite 2D billboard trong scene 3D có đèn thật."
+run/main_scene="res://scenes/Swarm.tscn"
+config/features=PackedStringArray("4.6", "Forward Plus")
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/stretch/mode="canvas_items"
+
+[rendering]
+
+anti_aliasing/quality/msaa_3d=2
