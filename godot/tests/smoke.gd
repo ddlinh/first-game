@@ -1,6 +1,8 @@
 extends SceneTree
 ## Test tạm: chạy trọn một vòng map vây không cần cửa sổ, in trạng thái mỗi 5 giây.
-## Có mô phỏng cả lăn né để chắc chắn nhánh dash không làm sập game.
+##
+## Có GIỮ CHUỘT suốt vòng đấu — từ khi chém là chủ động, không bấm chuột thì test
+## này chỉ đứng chịu chết và chẳng chạy qua nhánh nào của chém, sét lan hay nổ dây.
 
 var swarm: Swarm
 var frames := 0
@@ -18,6 +20,10 @@ func _process(_delta: float) -> bool:
 	# lúc đó các @onready mới có giá trị.
 	if frames == 1:
 		swarm.start_game()          # bỏ qua màn chờ, vào thẳng vòng đấu
+		var ev := InputEventMouseButton.new()
+		ev.button_index = MOUSE_BUTTON_LEFT
+		ev.pressed = true
+		Input.parse_input_event(ev)   # giữ chuột, cho chém liên tục
 		return false
 	if frames % 300 == 0:
 		print("t=%5.1f  hp=%3d  dur=%5.1f  kills=%2d  alive=%2d  dash=%.2f  hero@(%.1f, %.1f)" % [

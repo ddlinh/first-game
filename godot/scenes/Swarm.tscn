@@ -1,4 +1,4 @@
-[gd_scene load_steps=27 format=3]
+[gd_scene load_steps=30 format=3]
 
 [ext_resource type="Script" path="res://scripts/swarm.gd" id="1_swarm"]
 [ext_resource type="PackedScene" path="res://scenes/Hero.tscn" id="2_hero"]
@@ -8,6 +8,8 @@
 [ext_resource type="AudioStream" path="res://audio/hurt.wav" id="6_hurt"]
 [ext_resource type="AudioStream" path="res://audio/dash.wav" id="7_dash"]
 [ext_resource type="AudioStream" path="res://audio/broke.wav" id="8_broke"]
+[ext_resource type="AudioStream" path="res://audio/zap.wav" id="11_zap"]
+[ext_resource type="AudioStream" path="res://audio/boom.wav" id="12_boom"]
 [ext_resource type="AudioStream" path="res://audio/win.wav" id="9_win"]
 [ext_resource type="AudioStream" path="res://audio/drone.wav" id="10_drone"]
 
@@ -117,6 +119,13 @@ border_width_top = 1
 border_width_right = 1
 border_width_bottom = 1
 border_color = Color(0.32, 0.24, 0.15, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+
+[sub_resource type="StyleBoxFlat" id="Style_bar_swing"]
+bg_color = Color(1, 0.78, 0.4, 0.9)
 corner_radius_top_left = 4
 corner_radius_top_right = 4
 corner_radius_bottom_right = 4
@@ -284,6 +293,16 @@ unique_name_in_owner = true
 stream = ExtResource("8_broke")
 volume_db = -7.0
 
+[node name="SfxZap" type="AudioStreamPlayer" parent="Audio"]
+unique_name_in_owner = true
+stream = ExtResource("11_zap")
+volume_db = -12.0
+
+[node name="SfxBoom" type="AudioStreamPlayer" parent="Audio"]
+unique_name_in_owner = true
+stream = ExtResource("12_boom")
+volume_db = -11.0
+
 [node name="SfxEnd" type="AudioStreamPlayer" parent="Audio"]
 unique_name_in_owner = true
 stream = ExtResource("9_win")
@@ -330,12 +349,27 @@ anchors_preset = 12
 anchor_top = 1.0
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_top = -82.0
+offset_top = -122.0
 offset_bottom = -46.0
 grow_horizontal = 2
 grow_vertical = 0
 alignment = 1
 theme_override_constants/separation = 3
+
+[node name="SwingLabel" type="Label" parent="HUD/DashBox"]
+text = "CHÉM — chuột trái"
+horizontal_alignment = 1
+label_settings = SubResource("Lbl_dim")
+
+[node name="SwingRow" type="CenterContainer" parent="HUD/DashBox"]
+
+[node name="SwingBar" type="ProgressBar" parent="HUD/DashBox/SwingRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(190, 9)
+value = 100.0
+show_percentage = false
+theme_override_styles/background = SubResource("Style_bar_bg")
+theme_override_styles/fill = SubResource("Style_bar_swing")
 
 [node name="DashLabel" type="Label" parent="HUD/DashBox"]
 text = "LĂN NÉ — Space"
@@ -362,7 +396,7 @@ offset_bottom = -14.0
 grow_horizontal = 2
 grow_vertical = 0
 horizontal_alignment = 1
-text = "WASD / phím mũi tên để đi — vũ khí tự chém"
+text = "WASD để đi  ·  chuột trái để chém  ·  Space để lăn né"
 label_settings = SubResource("Lbl_dim")
 
 [node name="MenuPanel" type="PanelContainer" parent="HUD"]
@@ -396,8 +430,9 @@ horizontal_alignment = 1
 label_settings = SubResource("Lbl_body")
 
 [node name="Rules" type="Label" parent="HUD/MenuPanel/Margin/Box"]
-text = "WASD / mũi tên để đi   ·   Space để lăn né
-Vũ khí tự chém quái trong vòng sáng dưới chân.
+text = "WASD / mũi tên để đi   ·   CHUỘT TRÁI để chém   ·   Space để lăn né
+Nhát chém quét cả vòng sáng dưới chân — chém khi nào là bạn quyết.
+Quái bị hạ sẽ NỔ và lan sang con bên cạnh, dồn chúng lại rồi hãy chém.
 Lăn né thì miễn thương — nhưng phải chờ hồi chiêu."
 horizontal_alignment = 1
 label_settings = SubResource("Lbl_dim")

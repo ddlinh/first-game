@@ -1,18 +1,33 @@
 extends SceneTree
 ## Đo độ khó: chạy nhiều lượt liên tiếp không cần cửa sổ với hai kiểu người chơi.
 ##
-##   godot --headless --path . --script tests/balance.gd -- im    (đứng im, không bấm gì)
-##   godot --headless --path . --script tests/balance.gd -- bot    (né và lăn tự động)
+##   ... -- im     đứng im, không bấm gì cả
+##   ... -- spam   đứng im nhưng chém liên tục mỗi khi hết hồi chiêu
+##   ... -- bot    di chuyển, lăn né, và chỉ chém khi có quái trong tầm
+##   ... -- bot speed=1 rounds=6      (chạy đúng tốc độ thật, để đối chiếu)
 ##
-## Mục tiêu cân bằng: kiểu "im" phải THUA gần như luôn, kiểu "bot" phải THẮNG
-## phần lớn. Nếu "im" mà thắng thì game tự chơi hộ người chơi.
+## Từ khi chém phải bấm chuột, kiểu "im" không còn là phép đo hữu ích nữa: không
+## chém thì chắc chắn chết, nên nó chỉ còn dùng để kiểm tra game không tự thắng hộ.
+## Phép đo thật là "spam" — nó đúng bằng hành vi auto-chém cũ:
+##
+##   "spam" phải THUA   (không thì đứng một chỗ nhả đòn là xong, vị trí vô nghĩa)
+##   "bot"  phải THẮNG phần lớn
+##
+## CÁCH CHẠY NHANH HƠN THỜI GIAN THỰC — chỗ này từng làm sai và cho số liệu giả:
+##
+## Sai: chỉ đặt Engine.time_scale. Godot KHÔNG chạy thêm bước physics; nó nhân
+## delta của mỗi bước lên. Ở time_scale 12 mỗi bước tiến 0.2 giây game thay vì
+## 1/60, nên quái nhảy từng đoạn to và va chạm bị lấy mẫu quá thưa. Cùng một
+## build, đo ở time_scale 8 ra "đứng im thắng 4/8", ở 12 ra "16/16".
+##
+## Đúng: tăng physics_ticks_per_second theo cùng hệ số. Khi đó
+##   delta mỗi bước = time_scale / ticks = 1/60, y như lúc chơi thật,
+## chỉ là mỗi giây thật chạy nhiều bước hơn. Kiểm chứng bằng speed=1.
 
-const ROUNDS := 8
+const BASE_TICKS := 60
 
-## Godot headless vẫn tiến theo thời gian thực, nên phải kéo nhanh thời gian lên
-## nếu không mỗi kiểu người chơi mất gần 3 phút. Mọi thứ trong game tính theo
-## delta nên kết quả không đổi, chỉ có bước physics chạy dày hơn mỗi giây thật.
-const SPEED := 8.0
+var rounds := 16
+var speed := 10.0
 
 var swarm: Swarm
 var mode := "im"
@@ -25,9 +40,19 @@ var keys_down := {}
 
 func _initialize() -> void:
 	for a in OS.get_cmdline_user_args():
-		if a in ["im", "bot"]:
+		if a in ["im", "spam", "bot"]:
 			mode = a
-	Engine.time_scale = SPEED
+		elif a.begins_with("speed="):
+			speed = maxf(1.0, float(a.trim_prefix("speed=")))
+		elif a.begins_with("rounds="):
+			rounds = maxi(1, int(a.trim_prefix("rounds=")))
+
+	Engine.physics_ticks_per_second = int(BASE_TICKS * speed)
+	Engine.time_scale = speed
+	var step := speed / float(Engine.physics_ticks_per_second)
+	print("bước physics = %.6f s (phải bằng %.6f để khớp lúc chơi thật)"
+		% [step, 1.0 / BASE_TICKS])
+
 	swarm = load("res://scenes/Swarm.tscn").instantiate()
 	swarm.record_enabled = false      # test không được ghi kỷ lục của người chơi
 	root.add_child(swarm)
@@ -47,9 +72,24 @@ func _key(code: Key, pressed: bool) -> void:
 func _release_all() -> void:
 	for code in keys_down.keys():
 		_key(code, false)
+	_mouse(false)
 
 
-## Bot: chạy ra xa trọng tâm đám quái gần, thấy quá gần thì lăn.
+var mouse_down := false
+
+## Bơm nút chuột vào Input để hero.gd đọc được bằng Input.is_mouse_button_pressed().
+func _mouse(pressed: bool) -> void:
+	if mouse_down == pressed:
+		return
+	mouse_down = pressed
+	var ev := InputEventMouseButton.new()
+	ev.button_index = MOUSE_BUTTON_LEFT
+	ev.pressed = pressed
+	Input.parse_input_event(ev)
+
+
+## Bot: chạy ra xa trọng tâm đám quái gần, thấy quá gần thì lăn, và chỉ chém khi
+## có con nào lọt vào tầm chém — chém không thì lãng phí độ bền.
 func _drive() -> void:
 	var hero := swarm.hero
 	var cam := swarm.cam
@@ -66,11 +106,12 @@ func _drive() -> void:
 		nearest = minf(nearest, d)
 		away += to / d / d          # càng gần càng đẩy mạnh
 
+	_mouse(nearest < hero.weapon.swing_radius_pct() * Hero.PCT)
+
 	# kéo nhẹ về giữa sân để không bị dồn vào góc
 	away += -hero.global_position * 0.02
 
 	if away.length_squared() < 0.000001:
-		_release_all()
 		return
 
 	# hero.gd quay hướng nhập liệu theo camera, nên phải quay ngược lại mới ra WASD
@@ -83,14 +124,20 @@ func _drive() -> void:
 
 
 func _physics_process(_delta: float) -> bool:
+	# Chỉ _process mới dừng được vòng lặp, mà ở ticks cao physics chạy dày hơn
+	# _process rất nhiều — không chặn ở đây thì sau khi báo cáo xong vẫn có thêm
+	# hàng chục lượt bị ghi và in báo cáo lặp lại.
+	if quit:
+		return false
 	if not started:
 		started = true
 		swarm.start_game()
 		return false
 
 	if swarm.state == Swarm.State.PLAYING:
-		if mode == "bot":
-			_drive()
+		match mode:
+			"bot": _drive()
+			"spam": _mouse(true)      # đúng hành vi auto-chém cũ: luôn nhả đòn
 		return false
 
 	# vừa xong một lượt
@@ -102,7 +149,7 @@ func _physics_process(_delta: float) -> bool:
 		"hp": maxi(0, swarm.hero.hp),
 	})
 	round_no += 1
-	if round_no >= ROUNDS:
+	if round_no >= rounds:
 		_report()
 		quit = true
 		return false

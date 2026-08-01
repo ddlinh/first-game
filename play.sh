@@ -2,6 +2,7 @@
 # Mở EMBERHOLD.
 #   ./play.sh          chơi game
 #   ./play.sh test     chạy toàn bộ test không cần cửa sổ
+#   ./play.sh balance  đo độ khó với hai kiểu người chơi
 #   ./play.sh shot     chụp ảnh màn chờ và giữa trận ra godot/_shot-*.png
 set -euo pipefail
 
@@ -35,9 +36,17 @@ find_godot() {
 case "${1:-game}" in
 test)
 	godot="$(find_godot)"
-	for t in smoke dash; do
+	for t in smoke dash blast; do
 		echo "════ tests/$t.gd ════"
 		"$godot" --headless --path "$here/godot" --script "tests/$t.gd"
+	done
+	;;
+balance)
+	godot="$(find_godot)"
+	for kind in im spam bot; do
+		echo "════ độ khó với kiểu chơi: $kind ════"
+		"$godot" --headless --path "$here/godot" \
+			--script tests/balance.gd -- "$kind" speed=10 rounds=16
 	done
 	;;
 shot)
@@ -50,7 +59,7 @@ game)
 	exec "$godot" --path "$here/godot"
 	;;
 *)
-	echo "Dùng: ./play.sh [game|test|shot]" >&2
+	echo "Dùng: ./play.sh [game|test|balance|shot]" >&2
 	exit 2
 	;;
 esac

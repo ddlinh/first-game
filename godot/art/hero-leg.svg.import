@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://tb61jm30buwp"
-path="res://.godot/imported/hero.svg-5216d76c4b69d1bdfd84d8ab8f4d7cb1.ctex"
+uid="uid://bvkx50ywa3117"
+path="res://.godot/imported/hero-leg.svg-8d9a719b71ad4594e0250e367b987d53.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://art/hero.svg"
-dest_files=["res://.godot/imported/hero.svg-5216d76c4b69d1bdfd84d8ab8f4d7cb1.ctex"]
+source_file="res://art/hero-leg.svg"
+dest_files=["res://.godot/imported/hero-leg.svg-8d9a719b71ad4594e0250e367b987d53.ctex"]
 
 [params]
 

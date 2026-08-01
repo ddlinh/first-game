@@ -9,6 +9,9 @@ extends Resource
 @export var tough: int = 6
 @export var weight: int = 0
 @export var rust: int = 6
+## Điện tích của lưỡi. Chém trúng quái ƯỚT thì sét nhảy sang các con ướt gần đó.
+## Đây là chỉ số riêng của bản Godot, bản web không có.
+@export var shock: int = 3
 
 var max_dur: float = 26.0
 var dur: float = 26.0
@@ -39,6 +42,14 @@ func swing_radius_pct() -> float:
 func swing_damage() -> int:
 	return maxi(1, roundi(hard * 0.9))
 
+## Sát thương mỗi nhịp sét nhảy. Yếu hơn một nhát chém vì nó đánh diện rộng.
+func shock_damage() -> int:
+	return maxi(1, roundi(shock * 0.9))
+
+## Sét nhảy được mấy chặng. Điện càng mạnh thì chuỗi càng dài.
+func chain_jumps() -> int:
+	return clampi(shock, 0, 4)
+
 ## Cứng cao mà dẻo dai thấp -> lưỡi giòn, mẻ nhanh hơn 1.5 lần.
 func is_brittle() -> bool:
 	return hard - tough > 3
@@ -53,3 +64,6 @@ func take_wear(amount: float) -> void:
 		if not broken:
 			broken = true
 			hard = maxi(1, roundi(hard * 0.4))
+			# Lưỡi mẻ thì mạch điện cũng đứt theo. Cộng dồn với sát thương sụp,
+			# đây là thứ khiến việc để vũ khí mẻ trở thành án tử.
+			shock = shock / 2

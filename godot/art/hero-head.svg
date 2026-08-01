@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="42" height="41" viewBox="0 0 42 41">
+ <!-- Đầu và mũ trụ. Vành mũ nằm trên, mắt lộ ra dưới vành. -->
+ <g stroke="#1a1208" stroke-width="2.5" stroke-linejoin="round">
+  <circle cx="21" cy="24" r="14" fill="#e8bb8e"/>
+  <path d="M6 20 Q21 2 36 20 L36 13 Q21 -2 6 13 Z" fill="#8c8f96"/>
+  <path d="M6 16 L36 16 L36 22 L6 22 Z" fill="#6e7178"/>
+  <rect x="13" y="26" width="5" height="6" rx="1" fill="#17100a" stroke="none"/>
+  <rect x="25" y="26" width="5" height="6" rx="1" fill="#17100a" stroke="none"/>
+ </g>
+</svg>

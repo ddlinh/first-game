@@ -15,6 +15,7 @@ var _waited := 0
 var _wait_frames := 0
 var _hp_guard := -1        ## máu lúc bắt đầu miễn thương, -1 = không canh
 var _old_mobs := {}        ## instance id của đám quái lượt trước, để soi lúc chơi lại
+var _dur_mark: float = 0.0 ## độ bền ghi lại, dùng để suy ra đã chém hay chưa
 
 const WAIT_MAX := 400      ## quá số frame này coi như mong đợi không bao giờ đúng
 
@@ -41,6 +42,22 @@ func _build() -> void:
 	_expect(func() -> bool: return swarm.hero.dash_ready_ratio() == 1.0,
 		"lăn né sẵn sàng từ đầu")
 	_expect(func() -> bool: return swarm._alive_count() >= 3, "quái có spawn vào sân")
+
+	# Chém là chủ động: không bấm chuột thì tuyệt đối không được có nhát nào.
+	# Suy ra bằng độ bền vũ khí — mỗi nhát chém đều làm nó tụt.
+	_note("— chém phải do chuột, không tự động —")
+	_do(func() -> void: _dur_mark = swarm.hero.weapon.dur)
+	_wait(90)
+	_expect(func() -> bool: return swarm.hero.weapon.dur == _dur_mark,
+		"không bấm chuột thì không chém nhát nào")
+	_expect(func() -> bool: return swarm.hero.swing_ready_ratio() == 1.0,
+		"để yên thì hồi chiêu chém luôn đầy")
+	_do(func() -> void: _mouse(true))
+	_expect(func() -> bool: return swarm.hero.weapon.dur < _dur_mark,
+		"bấm chuột trái thì chém")
+	_expect(func() -> bool: return swarm.hero.swing_ready_ratio() < 1.0,
+		"chém xong thì vào hồi chiêu")
+	_do(func() -> void: _mouse(false))
 
 	_note("— lăn né —")
 	_do(func() -> void:
@@ -114,6 +131,14 @@ func _key(code: Key, pressed: bool) -> void:
 	var ev := InputEventKey.new()
 	ev.keycode = code
 	ev.physical_keycode = code
+	ev.pressed = pressed
+	Input.parse_input_event(ev)
+
+
+## Bơm nút chuột để hero.gd đọc được bằng Input.is_mouse_button_pressed().
+func _mouse(pressed: bool) -> void:
+	var ev := InputEventMouseButton.new()
+	ev.button_index = MOUSE_BUTTON_LEFT
 	ev.pressed = pressed
 	Input.parse_input_event(ev)
 

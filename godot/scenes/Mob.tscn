@@ -23,9 +23,8 @@ mesh = SubResource("Sphere_blob")
 surface_material_override/0 = SubResource("Mat_blob")
 
 [node name="Sprite" type="Sprite3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.45, 0)
+transform = Transform3D(0.70710678, 0, 0.70710678, 0, 1, 0, -0.70710678, 0, 0.70710678, 0, 0.45, 0)
 cast_shadow = 0
 pixel_size = 0.018
-billboard = 2
 shaded = true
 alpha_cut = 1

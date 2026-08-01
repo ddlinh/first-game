@@ -5,7 +5,8 @@ extends Node3D
 ## Không dùng physics body — khoảng cách tính tay, đúng như bản HTML, nhẹ và dễ đọc.
 
 signal reached_player(damage: int)
-signal killed
+## Kèm vị trí để bên nhận biết nổ ở đâu, vì lúc nhận thì quái đã đang tan.
+signal killed(at: Vector3)
 
 const PCT := 0.2          ## 1% sân ảo = 0.2 m (sân 20x20 m)
 const TOUCH_PCT := 4.5    ## chạm nhân vật ở khoảng cách này (%)
@@ -21,6 +22,8 @@ var hp: int = 5
 var damage: int = 3
 var speed_pct: float = 1.6 * 5.5   ## %/giây — hệ số 5.5 lấy từ bản HTML
 var flies: bool = false
+## Quái ướt thì dẫn điện: sét từ lưỡi kiếm nhảy được sang nó.
+var wet: bool = false
 var dead: bool = false
 
 var target: Hero
@@ -86,7 +89,7 @@ func _die(by_weapon: bool) -> void:
 		return
 	dead = true
 	if by_weapon:
-		killed.emit()
+		killed.emit(global_position)
 	set_physics_process(false)
 	var tw := create_tween().set_parallel(true)
 	tw.tween_property(sprite, "scale", Vector3.ZERO, 0.22).set_ease(Tween.EASE_IN)
