@@ -7,7 +7,7 @@ config_version=5
 
 config/name="Chiến tranh Khuẩn Lạc"
 config/description="Ba chủng vi khuẩn khắc chế vòng tròn trên đĩa thạch. Người chơi cấy quân và can thiệp, trận đánh tự diễn ra."
-run/main_scene="res://scenes/Dish.tscn"
+run/main_scene="res://proto2/Agents.tscn"
 config/features=PackedStringArray("4.4", "Forward Plus")
 
 [display]
