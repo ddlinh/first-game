@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Mở EMBERHOLD.
+# Mở CHIẾN TRANH KHUẨN LẠC.
 #   ./play.sh          chơi game
-#   ./play.sh test     chạy toàn bộ test không cần cửa sổ
-#   ./play.sh balance  đo độ khó với hai kiểu người chơi
-#   ./play.sh shot     chụp ảnh màn chờ và giữa trận ra godot/_shot-*.png
+#   ./play.sh test     chạy test không cần cửa sổ (smoke + mọi mục tiêu)
+#   ./play.sh balance  đo thế cân bằng của lưới trên mọi thế cờ
+#   ./play.sh tune     các phép đo dùng để chọn số: tốc độ, hoa văn, mở màn
+#   ./play.sh shot     chụp ảnh ra godot/_shot-*.png
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -33,33 +34,39 @@ find_godot() {
 	exit 1
 }
 
-case "${1:-game}" in
-test)
-	godot="$(find_godot)"
-	for t in smoke dash blast; do
+run_headless() {
+	local godot="$1"; shift
+	for t in "$@"; do
 		echo "════ tests/$t.gd ════"
 		"$godot" --headless --path "$here/godot" --script "tests/$t.gd"
 	done
+}
+
+case "${1:-game}" in
+test)
+	run_headless "$(find_godot)" smoke goals
 	;;
 balance)
-	godot="$(find_godot)"
-	for kind in im spam bot; do
-		echo "════ độ khó với kiểu chơi: $kind ════"
-		"$godot" --headless --path "$here/godot" \
-			--script tests/balance.gd -- "$kind" speed=10 rounds=16
-	done
+	run_headless "$(find_godot)" balance
+	;;
+tune)
+	# Ba phép đo đứng sau ba con số dễ chỉnh sai nhất: cạnh lưới (bench), độ linh
+	# động cho ra hoa văn (diag_pattern), và đoạn quá độ 60 giây đầu (diag_opening).
+	run_headless "$(find_godot)" bench diag_pattern diag_opening diag_stages
+	;;
+render)
+	# Cần cửa sổ thật. Tự tắt vsync bên trong, xem chú thích đầu tests/diag_render.gd.
+	"$(find_godot)" --path "$here/godot" --script tests/diag_render.gd
 	;;
 shot)
-	godot="$(find_godot)"
-	"$godot" --path "$here/godot" --script tests/capture.gd
-	echo "Ảnh nằm ở $here/godot/_shot-menu.png và _shot-game.png"
+	"$(find_godot)" --path "$here/godot" --script tests/capture.gd
+	echo "Ảnh nằm ở $here/godot/_shot-*.png"
 	;;
 game)
-	godot="$(find_godot)"
-	exec "$godot" --path "$here/godot"
+	exec "$(find_godot)" --path "$here/godot"
 	;;
 *)
-	echo "Dùng: ./play.sh [game|test|balance|shot]" >&2
+	echo "Dùng: ./play.sh [game|test|balance|tune|render|shot]" >&2
 	exit 2
 	;;
 esac

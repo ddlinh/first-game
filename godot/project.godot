@@ -1,14 +1,14 @@
-; EMBERHOLD — map vây isometric 2.5D
+; CHIẾN TRANH KHUẨN LẠC — roguelite mô phỏng sinh thái 2.5D
 ; Chỉnh trong editor thì Godot sẽ ghi đè file này, cứ thoải mái sửa.
 
 config_version=5
 
 [application]
 
-config/name="Emberhold"
-config/description="Trụ lại giữa vòng vây hầm mộ. Sprite 2D billboard trong scene 3D có đèn thật."
-run/main_scene="res://scenes/Swarm.tscn"
-config/features=PackedStringArray("4.6", "Forward Plus")
+config/name="Chiến tranh Khuẩn Lạc"
+config/description="Ba chủng vi khuẩn khắc chế vòng tròn trên đĩa thạch. Người chơi cấy quân và can thiệp, trận đánh tự diễn ra."
+run/main_scene="res://scenes/Dish.tscn"
+config/features=PackedStringArray("4.4", "Forward Plus")
 
 [display]
 
@@ -18,4 +18,4 @@ window/stretch/mode="canvas_items"
 
 [rendering]
 
-anti_aliasing/quality/msaa_3d=2
+textures/canvas_textures/default_texture_filter=0

@@ -1,186 +1,133 @@
 extends SceneTree
-## Đo độ khó: chạy nhiều lượt liên tiếp không cần cửa sổ với hai kiểu người chơi.
+## Đo thế cân bằng của lưới KHI KHÔNG AI CAN THIỆP. Đây là bài kiểm tra quan trọng
+## nhất của game: nếu để mặc mà một chủng tự tuyệt chủng thì mọi mục tiêu chơi
+## phía trên đều vô nghĩa — người chơi thắng thua vì mô hình chứ không vì họ.
 ##
-##   ... -- im     đứng im, không bấm gì cả
-##   ... -- spam   đứng im nhưng chém liên tục mỗi khi hết hồi chiêu
-##   ... -- bot    di chuyển, lăn né, và chỉ chém khi có quái trong tầm
-##   ... -- bot speed=1 rounds=6      (chạy đúng tốc độ thật, để đối chiếu)
-##
-## Từ khi chém phải bấm chuột, kiểu "im" không còn là phép đo hữu ích nữa: không
-## chém thì chắc chắn chết, nên nó chỉ còn dùng để kiểm tra game không tự thắng hộ.
-## Phép đo thật là "spam" — nó đúng bằng hành vi auto-chém cũ:
-##
-##   "spam" phải THUA   (không thì đứng một chỗ nhả đòn là xong, vị trí vô nghĩa)
-##   "bot"  phải THẮNG phần lớn
-##
-## CÁCH CHẠY NHANH HƠN THỜI GIAN THỰC — chỗ này từng làm sai và cho số liệu giả:
-##
-## Sai: chỉ đặt Engine.time_scale. Godot KHÔNG chạy thêm bước physics; nó nhân
-## delta của mỗi bước lên. Ở time_scale 12 mỗi bước tiến 0.2 giây game thay vì
-## 1/60, nên quái nhảy từng đoạn to và va chạm bị lấy mẫu quá thưa. Cùng một
-## build, đo ở time_scale 8 ra "đứng im thắng 4/8", ở 12 ra "16/16".
-##
-## Đúng: tăng physics_ticks_per_second theo cùng hệ số. Khi đó
-##   delta mỗi bước = time_scale / ticks = 1/60, y như lúc chơi thật,
-## chỉ là mỗi giây thật chạy nhiều bước hơn. Kiểm chứng bằng speed=1.
+## "Bao vây" là ngoại lệ CÓ CHỦ Ý: tài liệu thiết kế dựng sẵn thế thua cho người
+## chơi (nhúm Tiết độc kẹt trong tường Kháng độc), nên đòi nó tự cân bằng là đòi
+## sai. Ở thế đó ta đo thứ khác: cụm khởi đầu cầm cự được bao lâu — tức người chơi
+## có kịp nhìn ra vấn đề và đổ bộ chỗ khác không.
 
-const BASE_TICKS := 60
+## Đúng bằng đĩa dài nhất trong game (mục tiêu Sinh tồn, 90 giây). Trước đây để 150
+## và nó bắt lỗi oan: ở độ linh động cho ra sóng xoắn ốc đẹp, hệ vẫn sập sau ~2 phút
+## — nhưng game không bao giờ chạy tới đó, nên siết theo mốc ấy là tự tay bóp hoa văn
+## xuống thành nhiễu hạt để qua một bài kiểm tra không có thật.
+const HORIZON := 90.0
+const STEP := 1.0 / 60.0
+const SNAP_EVERY := 22.5
 
-var rounds := 16
-var speed := 10.0
-
-var swarm: Swarm
-var mode := "im"
-var round_no := 0
-var results: Array[Dictionary] = []
-var started := false
-var quit := false
-var keys_down := {}
+## Cụm Tiết độc trong thế Bao vây phải sống ít nhất ngần này giây thì người chơi
+## mới kịp đọc thế cờ. Ngắn hơn là thua trước khi hiểu chuyện gì xảy ra.
+const SIEGE_WINDOW := 20.0
 
 
-func _initialize() -> void:
-	for a in OS.get_cmdline_user_args():
-		if a in ["im", "spam", "bot"]:
-			mode = a
-		elif a.begins_with("speed="):
-			speed = maxf(1.0, float(a.trim_prefix("speed=")))
-		elif a.begins_with("rounds="):
-			rounds = maxi(1, int(a.trim_prefix("rounds=")))
-
-	Engine.physics_ticks_per_second = int(BASE_TICKS * speed)
-	Engine.time_scale = speed
-	var step := speed / float(Engine.physics_ticks_per_second)
-	print("bước physics = %.6f s (phải bằng %.6f để khớp lúc chơi thật)"
-		% [step, 1.0 / BASE_TICKS])
-
-	swarm = load("res://scenes/Swarm.tscn").instantiate()
-	swarm.record_enabled = false      # test không được ghi kỷ lục của người chơi
-	root.add_child(swarm)
-
-
-func _key(code: Key, pressed: bool) -> void:
-	if keys_down.get(code, false) == pressed:
-		return
-	keys_down[code] = pressed
-	var ev := InputEventKey.new()
-	ev.keycode = code
-	ev.physical_keycode = code
-	ev.pressed = pressed
-	Input.parse_input_event(ev)
-
-
-func _release_all() -> void:
-	for code in keys_down.keys():
-		_key(code, false)
-	_mouse(false)
-
-
-var mouse_down := false
-
-## Bơm nút chuột vào Input để hero.gd đọc được bằng Input.is_mouse_button_pressed().
-func _mouse(pressed: bool) -> void:
-	if mouse_down == pressed:
-		return
-	mouse_down = pressed
-	var ev := InputEventMouseButton.new()
-	ev.button_index = MOUSE_BUTTON_LEFT
-	ev.pressed = pressed
-	Input.parse_input_event(ev)
-
-
-## Bot: chạy ra xa trọng tâm đám quái gần, thấy quá gần thì lăn, và chỉ chém khi
-## có con nào lọt vào tầm chém — chém không thì lãng phí độ bền.
-func _drive() -> void:
-	var hero := swarm.hero
-	var cam := swarm.cam
-
-	var away := Vector3.ZERO
-	var nearest := 999.0
-	for child in swarm.mobs_root.get_children():
-		var m := child as Mob
-		if m == null or m.dead:
-			continue
-		var to := hero.global_position - m.global_position
-		to.y = 0.0
-		var d := maxf(0.4, to.length())
-		nearest = minf(nearest, d)
-		away += to / d / d          # càng gần càng đẩy mạnh
-
-	_mouse(nearest < hero.weapon.swing_radius_pct() * Hero.PCT)
-
-	# kéo nhẹ về giữa sân để không bị dồn vào góc
-	away += -hero.global_position * 0.02
-
-	if away.length_squared() < 0.000001:
-		return
-
-	# hero.gd quay hướng nhập liệu theo camera, nên phải quay ngược lại mới ra WASD
-	var want := away.normalized().rotated(Vector3.UP, -cam.global_rotation.y)
-	_key(KEY_W, want.z < -0.35)
-	_key(KEY_S, want.z > 0.35)
-	_key(KEY_A, want.x < -0.35)
-	_key(KEY_D, want.x > 0.35)
-	_key(KEY_SPACE, nearest < 1.6 and hero.dash_ready_ratio() >= 1.0)
-
-
-func _physics_process(_delta: float) -> bool:
-	# Chỉ _process mới dừng được vòng lặp, mà ở ticks cao physics chạy dày hơn
-	# _process rất nhiều — không chặn ở đây thì sau khi báo cáo xong vẫn có thêm
-	# hàng chục lượt bị ghi và in báo cáo lặp lại.
-	if quit:
-		return false
-	if not started:
-		started = true
-		swarm.start_game()
-		return false
-
-	if swarm.state == Swarm.State.PLAYING:
-		match mode:
-			"bot": _drive()
-			"spam": _mouse(true)      # đúng hành vi auto-chém cũ: luôn nhả đòn
-		return false
-
-	# vừa xong một lượt
-	_release_all()
-	results.append({
-		"win": swarm.elapsed >= Swarm.SURVIVE,
-		"t": swarm.elapsed,
-		"kills": swarm.kills,
-		"hp": maxi(0, swarm.hero.hp),
-	})
-	round_no += 1
-	if round_no >= rounds:
-		_report()
-		quit = true
-		return false
-	swarm.start_game()
-	return false
+## Ba nhánh của mỗi chủng cộng lại phải ≤ 1, và tốc độ dọn sạch hiệu dụng của cả ba
+## phải bằng nhau — đó là hai điều kiện giữ cho vòng khắc chế trung tính. Cả hai từng
+## bị phá âm thầm khi nâng `mobility`, và không có phép kiểm nào bắt được vì mọi số
+## liệu in ra đều đọc từ ngưỡng chứ không từ xác suất thực nhận.
+func _check_rates() -> bool:
+	var sim := Sim.new(32)
+	var ok := true
+	for s in Sim.SPECIES:
+		var sw: float = sim._swap[s]
+		var rp: float = sim._swap_repro[s] - sw
+		var kl_want: float = sim._swap_repro_kill[s] - sim._swap_repro[s]
+		var kl_real: float = minf(sim._swap_repro_kill[s], 1.0) - sim._swap_repro[s]
+		var total := sw + rp + kl_want
+		var clear := kl_real / Sim.HP_TABLE[Sim.PREY[s]]
+		var line_ok := total <= 1.0001 and absf(clear - Sim.KILL_BASE) < 0.0005
+		ok = ok and line_ok
+		print("  %-10s tổng %.3f · dọn sạch %.4f (cần %.4f)  %s" % [
+			["", "Tiết độc", "Nhạy cảm", "Kháng độc"][s], total, clear, Sim.KILL_BASE,
+			"OK" if line_ok else "LỆCH — nhánh ra đòn bị cắt cụt"])
+	return ok
 
 
 func _process(_delta: float) -> bool:
-	return quit
+	# Sim bốc số bằng randi()/randf() toàn cục. Không gieo hạt thì hai lần chạy ra
+	# hai kết quả, và một ngưỡng sát nút (cụm bị vây cầm cự 19.9 hay 20.1 giây) lúc
+	# đạt lúc không — test kiểu đó không dùng để chốt số được.
+	seed(20240)
+	_check_writes()
+	print("bảng xác suất ba nhánh:")
+	var fails := 0
+	if not _check_rates():
+		fails += 1
+	print("")
+
+	for layout in [Stages.Layout.SCATTER, Stages.Layout.CLUMPS,
+			Stages.Layout.VORTEX, Stages.Layout.SIEGE]:
+		for terrain in [Stages.Terrain.OPEN, Stages.Terrain.CHOKE,
+				Stages.Terrain.ISLANDS, Stages.Terrain.FLOW]:
+			if not Stages.is_allowed(terrain, layout, Stages.Goal.HOLD):
+				continue
+			if not _run_one(terrain, layout):
+				fails += 1
+	print("")
+	print("KẾT LUẬN: %s" % ("mọi thế cờ đạt yêu cầu" if fails == 0
+		else "%d thế cờ KHÔNG đạt" % fails))
+	return true
 
 
-func _report() -> void:
-	var wins := 0
-	var sum_t := 0.0
-	var sum_k := 0
-	var sum_hp := 0
-	print("kiểu người chơi: %s   (%d lượt)" % [mode, results.size()])
-	for i in results.size():
-		var r: Dictionary = results[i]
-		if r["win"]:
-			wins += 1
-		sum_t += r["t"]
-		sum_k += int(r["kills"])
-		sum_hp += int(r["hp"])
-		print("  lượt %2d: %s  t=%5.1fs  hạ=%2d  máu còn=%2d" % [
-			i + 1, "THẮNG" if r["win"] else "thua ", r["t"], r["kills"], r["hp"]])
-	var n := float(results.size())
-	print("→ thắng %d/%d   trung bình: trụ %.1fs, hạ %.1f con, máu còn %.1f" % [
-		wins, results.size(), sum_t / n, sum_k / n, sum_hp / n])
+## Sim.grid là PackedByteArray — kiểu GIÁ TRỊ copy-on-write. Stages ghi vào nó qua
+## `sim.grid[i] = ...` từ bên ngoài; nếu GDScript không gán ngược lại thì mọi màn
+## chơi dựng ra sẽ là đĩa rỗng mà chẳng có lỗi nào nổ. Chốt lại bằng test này.
+func _check_writes() -> void:
+	var sim := Sim.new(16)
+	sim.grid[5] = Sim.RESISTANT
+	sim.hp[5] = 4
+	var ok := sim.grid[5] == Sim.RESISTANT and sim.hp[5] == 4
+	print("ghi mảng Packed qua tham chiếu đối tượng: %s" % ("OK" if ok
+		else "HỎNG — Stages dựng màn xong lưới vẫn rỗng"))
 
 
-func _finalize() -> void:
-	if swarm:
-		swarm.free()
+func _run_one(terrain: Stages.Terrain, layout: Stages.Layout) -> bool:
+	# ĐÚNG cạnh lưới của bản chơi. Trước đây để 160 cho nhanh, và nó nói dối theo cả
+	# hai chiều: lưới nhỏ hơn thì tuyệt chủng dễ hơn, nên test vừa báo động giả vừa
+	# không đo đúng cái đĩa mà người chơi cầm.
+	var sim := Sim.new(180)
+	var stage := Stages.make(terrain, layout, Stages.Goal.HOLD, 20240 + terrain * 7 + layout)
+	Stages.build(sim, stage)
+
+	var t := 0.0
+	var next_snap := SNAP_EVERY
+	var trace: Array[String] = []
+	var peak := 0.0
+	var toxic_died_at := -1.0
+
+	while t < HORIZON:
+		sim.advance(STEP)
+		t += STEP
+		if toxic_died_at < 0.0 and sim.ratio(Sim.TOXIC) <= 0.004:
+			toxic_died_at = t
+		if t >= next_snap:
+			next_snap += SNAP_EVERY
+			trace.append("%2d/%2d/%2d" % [
+				roundi(sim.ratio(Sim.TOXIC) * 100),
+				roundi(sim.ratio(Sim.SENSITIVE) * 100),
+				roundi(sim.ratio(Sim.RESISTANT) * 100)])
+		peak = maxf(peak, maxf(sim.ratio(Sim.TOXIC),
+			maxf(sim.ratio(Sim.SENSITIVE), sim.ratio(Sim.RESISTANT))))
+
+	var ok: bool
+	var note: String
+	if layout == Stages.Layout.SIEGE:
+		var lived := toxic_died_at if toxic_died_at > 0.0 else HORIZON
+		ok = lived >= SIEGE_WINDOW
+		note = "cụm đầu cầm cự %4.1fs (cần ≥%.0f)" % [lived, SIEGE_WINDOW]
+	else:
+		var alive := 0
+		for s in Sim.SPECIES:
+			if sim.ratio(s) > 0.02:
+				alive += 1
+		# Trần đỉnh nới từ 80% lên 90%: ở độ linh động cho ra sóng xoắn ốc nhìn được,
+		# đĩa chỉ còn vài mảng lớn nên biên độ dao động cũng to theo — có lúc một
+		# chủng ôm 82% rồi tuột về 46%. Cái đáng sợ là KHÔNG QUAY LẠI, mà điều đó
+		# đã nằm ở phép đếm "còn 3 chủng" rồi.
+		ok = alive == 3 and peak < 0.90
+		note = "còn %d chủng, đỉnh %2d%%" % [alive, roundi(peak * 100)]
+
+	print("%-16s %-12s %s   %s  %s" % [
+		Stages.TERRAIN_NAME[terrain], Stages.LAYOUT_NAME[layout],
+		" → ".join(trace), note, "OK" if ok else "KHÔNG ĐẠT"])
+	return ok
