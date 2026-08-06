@@ -52,6 +52,20 @@ Tên thẻ này đúng thuật ngữ: colicin được gọi là *narrow-spectru
 phổ hẹp vì chỉ diệt cùng loài/cùng chi. (Nói chặt thì colicin là **bacteriocin** và
 bacteriocin chính thức không được xếp là antibiotic — nhưng cách gọi kia có trong y văn.)
 
+### T6SS — "cây giáo" đâm-chạm (bản agent)
+Type VI Secretion System là một **nanomachine co rút**, cấu trúc **đồng nguồn với đuôi
+thực khuẩn thể**: tế bào phóng một mũi nhọn (phức Hcp/VgrG) **đâm thủng tế bào kề bên**
+và bơm độc. Đúng ba điều game dùng: (1) **contact-dependent** — phải CHẠM mới giết, khác
+hẳn colicin khuếch tán tầm xa (nên game tách hẳn state `STAB` với `DEFEND`); (2) là vũ khí
+**cạnh tranh liên khuẩn** (interbacterial), hợp với "chủng RIVAL trôi vào tranh niche →
+khuẩn nhà đâm"; (3) hình **cây giáo/harpoon** là mô tả thật. T6SS chỉ đấu KHUẨN, không
+dùng chống phage — game giữ đúng: chống phage vẫn là colicin/né, chỉ rival mới bị đâm.
+
+### Hình thái cầu khuẩn vs trực khuẩn (sprite)
+Sprite phân biệt **Staphylococcus = cầu khuẩn** (coccus, tròn, cụm) với **E. coli /
+Proteus / Bacillus = trực khuẩn** (bacillus, que) — đúng hình thái thật của các chi này;
+trực khuẩn xoay theo hướng bơi (có tiên mao). Đây là một điểm dạy được, không phải trang trí.
+
 ---
 
 ## 2. ĐƠN GIẢN HOÁ — có thật nhưng game làm khác
@@ -147,6 +161,14 @@ Không đúng không sai, chỉ là không có gốc thực tế:
   "dựng sẵn hai xoáy ổn định ngay từ đầu" là dàn cảnh.
 - **Hình họa chibi**: mắt to, mũ bảo hiểm, khiên, túi độc phập phồng. Vi khuẩn không có
   mắt, không đội mũ.
+- **Pixel-art nhân hoá (bản agent)**: thân khuẩn có mắt + biểu cảm theo việc — thuần
+  thiết kế (vi khuẩn không có mắt). Vũ khí thì bám cấu trúc thật (giáo = T6SS, mũi tiêm
+  = đuôi phage). MÀU sprite mã hoá VIỆC (kiếm ăn/ăn/thủ…), KHÔNG mã hoá chủng.
+- **Sprite chủng mới ở mức thô**: hiện chỉ hai hình thân — cầu khuẩn (Staph) vs trực
+  khuẩn (E. coli/Proteus/Bacillus). HÌNH THÁI cầu/que là thật, nhưng ba chủng trực khuẩn
+  đang trông GIỐNG HỆT nhau: chưa vẽ cụm-chùm-nho của Staph, sắc tố vàng của *S. aureus*,
+  tế bào bơi dài (swarmer) của Proteus, hay chuỗi + BÀO TỬ của Bacillus. Đó là những nét
+  đặc trưng THẬT còn thiếu — điểm nâng cấp đáng giá nhất cho phần hình chủng.
 - **Mây độc khi cấy** — trong game mây bung ra lúc người chơi cấy quân; tài liệu định
   cho nó bung khi ô Tiết độc diệt ô địch ("áp sát nổ BỤP").
 - **Lưới toroidal**, `CHURN 16.5` nhịp/ô/giây, cạnh lưới 180 — quy ước mô hình hoá.
@@ -189,3 +211,7 @@ dụng sang tăng xác suất ra đòn.
 - *Nutrients and flow shape the cyclic dominance games between Escherichia coli
   strains.* bioRxiv (2022).
   <https://www.biorxiv.org/content/10.1101/2022.08.15.504033.full.pdf>
+- Cianfanelli FR, Monlezun L, Coulthurst SJ. *Aim, Load, Fire: The Type VI Secretion
+  System, a Bacterial Nanoweapon.* Trends Microbiol 24(1):51–62 (2016) — T6SS co rút,
+  đồng nguồn đuôi phage, contact-dependent, cạnh tranh liên khuẩn.
+  <https://doi.org/10.1016/j.tim.2015.10.005>

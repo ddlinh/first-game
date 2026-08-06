@@ -11,6 +11,17 @@ const Strains := preload("res://proto2/strains.gd")
 var col
 var _font: Font
 var _t := 0.0
+var _painting := false        ## đang GIỮ-KÉO rải (cọ)
+
+# sprite pixel-art (bake bằng bake_sprites.gd → proto2/sprites/*.png)
+var _tex_phage: Texture2D
+var _tex_rival: Texture2D
+var _tex_spear: Texture2D
+var _tex_spore: Texture2D
+var _strain_tex: Array = []   ## thân RIÊNG từng chủng (theo thứ tự Strains.LIST)
+var _body: Texture2D          ## thân của chủng màn này
+var _rod := false             ## chủng này là trực khuẩn (xoay theo hướng bơi)?
+var _is_bacillus := false     ## chủng tạo BÀO TỬ → con ngủ đông hiện endospore
 
 # hiệu ứng combat + rung màn + âm thanh
 var _fx: Array = []            ## {pos, kind, t, life, seed}
@@ -46,6 +57,8 @@ var _book_panel: Panel
 var _book_lbl: RichTextLabel
 
 const BODY_R := 7.0
+const DAB := 10.0             ## rải một nhấp chuột
+const PAINT_RATE := 46.0      ## rải/giây khi GIỮ-KÉO (cọ vẽ dinh dưỡng)
 const COLORS := {
 	AgentColony.FORAGE: Color(0.46, 0.72, 0.96),
 	AgentColony.EAT: Color(0.50, 0.90, 0.56),
@@ -54,6 +67,7 @@ const COLORS := {
 	AgentColony.DEFEND: Color(0.74, 0.46, 0.96),
 	AgentColony.INFECTED: Color(0.97, 0.40, 0.40),
 	AgentColony.BUILD: Color(0.90, 0.62, 0.34),
+	AgentColony.STAB: Color(0.98, 0.52, 0.28),
 }
 const NUTRIENT_COL := Color(0.86, 0.70, 0.32)
 const WASTE_COL := Color(0.52, 0.50, 0.40)
@@ -69,7 +83,7 @@ const C_DISH := Color(0.036, 0.048, 0.038)
 const C_RIM := Color(0.56, 0.62, 0.44, 0.20)
 
 const TUT := [
-	"Rải THỨC ĂN vào giữa: bấm chuột trái lên đĩa. Khuẩn bơi tới ĂN (xanh lá) rồi PHÂN ĐÔI (vàng) đẻ con.",
+	"Rải THỨC ĂN: bấm — hoặc GIỮ & KÉO để VẼ vệt (ngân sách 'Dinh dưỡng %' có hạn, tự hồi). Khuẩn bơi theo vệt tới ĂN (xanh lá) rồi PHÂN ĐÔI (vàng). Rải ĐÓN ĐẦU rìa đang mọc cho khỏi phí.",
 	"Giờ cứ rải THÊM vào MỘT CHỖ để dồn khuẩn lại thật ĐÔNG — đủ đông thì chúng sẽ tự làm một điều đặc biệt…",
 	"Cứ nuôi tiếp! Phế phẩm đọng sẽ hút CROSS-FEEDER (cyan); khuẩn đông thì PHAGE (hồng) bén vào — biofilm che chở.",
 ]
@@ -78,6 +92,8 @@ const TUT := [
 func _ready() -> void:
 	col = AgentColony.new(4242)
 	_font = ThemeDB.fallback_font
+	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST   # pixel-art: không làm nhoè
+	_load_sprites()
 	_build_audio()
 	_build_hud()
 	_place()
@@ -85,10 +101,48 @@ func _ready() -> void:
 	_enter_strain(0)
 
 
+func _load_sprites() -> void:
+	# Nạp thẳng từ PNG (bỏ qua import pipeline → chạy được headless, không cần .import).
+	# Thân riêng từng chủng, khớp thứ tự Strains.LIST (E. coli, Staph, Proteus, Bacillus).
+	_strain_tex = [
+		_load_png("cell_ecoli"), _load_png("cell_staph"),
+		_load_png("cell_proteus"), _load_png("cell_bacillus"),
+	]
+	_tex_phage = _load_png("phage")
+	_tex_rival = _load_png("rival")
+	_tex_spear = _load_png("spear")
+	_tex_spore = _load_png("spore")
+	_body = _strain_tex[0]
+
+
+func _load_png(name: String) -> Texture2D:
+	var img := Image.new()
+	var err := img.load("res://proto2/sprites/%s.png" % name)
+	if err != OK:
+		push_error("Không nạp được sprite %s — chạy bake_sprites.gd trước." % name)
+		return null
+	return ImageTexture.create_from_image(img)
+
+
+## Vẽ một sprite tâm tại pos, xoay `angle`, nhân màu `mod`, phóng `scale`.
+func _blit(tex: Texture2D, pos: Vector2, angle: float = 0.0,
+		mod: Color = Color.WHITE, scale: float = 1.0) -> void:
+	if tex == null:
+		return
+	var sz := tex.get_size()
+	draw_set_transform(pos, angle, Vector2(scale, scale))
+	draw_texture(tex, -sz * 0.5, mod)
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
 func _enter_strain(i: int) -> void:
 	strain_idx = i
 	var s: Dictionary = Strains.LIST[i]
 	col.set_environment(s["mot"], s["hard"], s["rich"])
+	# Hình thái theo chủng: sprite riêng + cờ để vẽ đúng nét (que xoay, bào tử…).
+	_body = _strain_tex[i] if i < _strain_tex.size() and _strain_tex[i] != null else _strain_tex[0]
+	_rod = s["mot"] >= AgentColony.SESSILE_THRESH   # có tiên mao → trực khuẩn (xoay theo hướng bơi)
+	_is_bacillus = s["name"].begins_with("Bacillus")
 	col.reset()
 	_met[i] = true
 	_nut_placed = 0
@@ -135,6 +189,10 @@ func _process(delta: float) -> void:
 		col.update(delta)
 		_drain_events()
 		_advance_tutorial(delta)
+		if _painting:                      # cọ: rải liên tục theo con trỏ khi giữ chuột
+			var m := get_local_mouse_position()
+			if m.length() < AgentColony.DISH_R - 6.0:
+				col.deposit(m, PAINT_RATE * delta)
 	if _toast_t > 0.0:
 		_toast_t -= delta
 	_update_hud()
@@ -168,6 +226,14 @@ func _drain_events() -> void:
 				_toast_col = Color(0.5, 0.95, 0.85)
 				_toast_t = 6.0
 				_play("crossfeeder")
+			"t6ss":
+				_spawn_fx(e["pos"], "t6ss", e.get("to", e["pos"]))
+			"rival":
+				_toast = "Khuẩn lạc thịnh (%d con) → một CHỦNG ĐỐI THỦ trôi vào tranh niche. Khuẩn nhà diệt nó bằng T6SS — cây giáo ĐÂM-CHẠM (khác colicin khuếch tán)." % e["pop"]
+				_toast_col = Color(1.0, 0.62, 0.4)
+				_toast_t = 6.5
+				_shake = minf(_shake + 2.5, 8.0)
+				_play("rival")
 	col.events.clear()
 
 
@@ -190,18 +256,21 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_SPACE, KEY_ENTER, KEY_KP_ENTER:
 				if _card_shown:
 					_card_shown = false
-	elif event is InputEventMouseButton and event.pressed \
-			and event.button_index == MOUSE_BUTTON_LEFT:
-		if _card_shown:
-			_card_shown = false
-			return
-		if _book_shown:
-			_book_shown = false
-			return
-		var p := to_local(event.position)
-		if p.length() < AgentColony.DISH_R - 6.0:
-			col.add_nutrient(p, 8.0)
-			_nut_placed += 1
+	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		if event.pressed:
+			if _card_shown:
+				_card_shown = false
+				return
+			if _book_shown:
+				_book_shown = false
+				return
+			_painting = true
+			var p := to_local(event.position)
+			if p.length() < AgentColony.DISH_R - 6.0:
+				col.deposit(p, DAB)         # nhấp = một dấu; giữ-kéo = vẽ vệt
+				_nut_placed += 1
+		else:
+			_painting = false
 
 
 func _restart() -> void:
@@ -226,6 +295,8 @@ func _draw() -> void:
 		_draw_building(b)
 	for c in col.crossfeeders:
 		_draw_symbiont(c["pos"])
+	for c in col.rivals:
+		_draw_rival(c)
 	for p in col.phages:
 		_draw_phage(p["pos"])
 	for a in col.agents:
@@ -285,29 +356,43 @@ func _draw_symbiont(pos: Vector2) -> void:
 
 
 func _draw_phage(pos: Vector2) -> void:
-	for i in 3:
-		var a := TAU * i / 3.0 + _t * 2.0
-		draw_line(pos, pos + Vector2(cos(a), sin(a)) * 6.0, PHAGE_COL, 1.5)
-	draw_circle(pos, 2.6, PHAGE_COL)
+	var bob := sin(_t * 7.0 + pos.x * 0.3) * 0.7
+	_blit(_tex_phage, pos + Vector2(0, bob), 0.0, Color.WHITE, 1.0)
+
+
+func _draw_rival(c: Dictionary) -> void:
+	# Kẻ xâm lấn: gai góc, khẽ rung để ra chất địch.
+	var jitter := Vector2(sin(_t * 20.0 + c["pos"].y), cos(_t * 17.0 + c["pos"].x)) * 0.6
+	_blit(_tex_rival, c["pos"] + jitter, 0.0, Color.WHITE, 1.25)
 
 
 func _draw_agent(a: Dictionary) -> void:
 	var pos: Vector2 = a["pos"]
 	var st: int = a["state"]
 	var base: Color = COLORS[st]
-	if st == AgentColony.DEFEND:
+	if st == AgentColony.DEFEND:                    # colicin: đám mây khuếch tán (tầm xa)
 		draw_arc(pos, AgentColony.TOXIN_RADIUS, 0, TAU, 28, Color(base, 0.20), 2.0, true)
 	if st == AgentColony.INFECTED:
 		base = base.lerp(Color(1, 1, 1), (0.5 + 0.5 * sin(_t * 18.0)) * 0.3)
-	if st == AgentColony.DIVIDE:
-		draw_circle(pos + Vector2(4, 0), BODY_R * 0.85, base)
-		_face(pos - Vector2(3, 0), st, base, a["vel"])
+	var ang := 0.0
+	if _rod:
+		var dir: Vector2 = a["vel"] if a["vel"].length() > 6.0 else a["heading"]
+		if dir.length() > 0.01:
+			ang = dir.angle()
+	if _is_bacillus and st == AgentColony.DORMANT:  # đói → Bacillus tạo BÀO TỬ (endospore)
+		_blit(_body, pos, ang, base.darkened(0.25))
+		_blit(_tex_spore, pos, ang)                 # oval sáng phase-bright, không tint
 		return
+	if st == AgentColony.DIVIDE:                    # đang tách đôi dọc trục dài
+		var along := Vector2(cos(ang), sin(ang))
+		_blit(_body, pos + along * 4.0, ang, base)
+		_blit(_body, pos - along * 4.0, ang, base)
+	else:
+		_blit(_body, pos, ang, base)
 	_face(pos, st, base, a["vel"])
 
 
 func _face(pos: Vector2, st: int, base: Color, vel: Vector2) -> void:
-	draw_circle(pos, BODY_R, base)
 	if st == AgentColony.FORAGE and vel.length() > 6.0:
 		draw_line(pos, pos - vel.normalized() * 10.0, Color(base, 0.5), 1.5)
 	var eyeL := pos + Vector2(-2.6, -1.4)
@@ -326,7 +411,7 @@ func _face(pos: Vector2, st: int, base: Color, vel: Vector2) -> void:
 	match st:
 		AgentColony.EAT, AgentColony.DIVIDE:
 			_mouth(m, [Vector2(-2, -0.4), Vector2(0, 1.2), Vector2(2, -0.4)])
-		AgentColony.DEFEND:
+		AgentColony.DEFEND, AgentColony.STAB:
 			_mouth(m, [Vector2(-2, 1.0), Vector2(0, -0.4), Vector2(2, 1.0)])
 		AgentColony.INFECTED:
 			draw_circle(m, 1.3, Color(0, 0, 0, 0.55))
@@ -344,7 +429,12 @@ func _mouth(m: Vector2, pts: Array) -> void:
 func _draw_ghost() -> void:
 	var mm := get_local_mouse_position()
 	if mm.length() < AgentColony.DISH_R - 6.0:
-		draw_arc(mm, 15.0, 0, TAU, 20, Color(NUTRIENT_COL, 0.6), 1.5, true)
+		var frac: float = col.nutrient_budget / AgentColony.NUT_BUDGET_MAX
+		# hết ngân sách → cọ đỏ mờ; còn thì vàng dinh dưỡng, đậm hơn khi đang vẽ
+		var ring := Color(0.9, 0.4, 0.3, 0.6) if frac < 0.06 else Color(NUTRIENT_COL, 0.7 if _painting else 0.5)
+		draw_arc(mm, 15.0, 0, TAU, 20, ring, 2.0 if _painting else 1.5, true)
+		if frac >= 0.06:
+			draw_circle(mm, 15.0 * frac, Color(NUTRIENT_COL, 0.12))   # lõi = còn bao nhiêu ngân sách
 
 
 func _draw_hover() -> void:
@@ -385,7 +475,7 @@ func _build_hud() -> void:
 	_tally = _mk_label(Vector2(24, 14), 15)
 
 	_legend = _mk_rich(Vector2(24, 40), 1180)
-	_legend.text = "[b]Màu = việc mỗi con:[/b]  [color=#75b8f5]kiếm ăn[/color] · [color=#80e58f]ăn[/color] · [color=#f7dc5c]phân đôi[/color] · [color=#e59c57]xây[/color] · [color=#bd75f5]phòng thủ[/color] · [color=#8f8fa0]ngủ đông[/color] · [color=#f76666]nhiễm[/color]   |   [color=#dcb352]thức ăn[/color] · [color=#857f66]phế phẩm[/color] · [color=#66ad99]biofilm[/color] · [color=#f7528f]phage[/color] · [color=#59e6cc]cross-feeder[/color]"
+	_legend.text = "[b]Màu = việc mỗi con:[/b]  [color=#75b8f5]kiếm ăn[/color] · [color=#80e58f]ăn[/color] · [color=#f7dc5c]phân đôi[/color] · [color=#e59c57]xây[/color] · [color=#bd75f5]phòng thủ (colicin)[/color] · [color=#fa8547]đâm (T6SS)[/color] · [color=#8f8fa0]ngủ đông[/color] · [color=#f76666]nhiễm[/color]   |   [color=#dcb352]thức ăn[/color] · [color=#857f66]phế phẩm[/color] · [color=#66ad99]biofilm[/color] · [color=#f7528f]phage[/color] · [color=#f79e4d]đối thủ[/color] · [color=#59e6cc]cross-feeder[/color]"
 
 	_toast_lbl = Label.new()
 	_toast_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -462,10 +552,11 @@ func _update_hud() -> void:
 		return
 	var s: Dictionary = Strains.LIST[strain_idx]
 	var t: Dictionary = col.tally()
-	_tally.text = "CHỦNG: %s   |   Dân số %d · ăn %d · phân đôi %d · thủ %d · nhiễm %d   |   phage %d · cross-feeder %d · biofilm %d      [N] đổi chủng · [B] sổ tay" % [
-		s["name"], col.population(), t[AgentColony.EAT], t[AgentColony.DIVIDE],
-		t[AgentColony.DEFEND], t[AgentColony.INFECTED],
-		col.phages.size(), col.crossfeeders.size(), col.buildings.size()]
+	_tally.text = "CHỦNG: %s   |   Dinh dưỡng %d%%   |   Dân số %d · ăn %d · phân đôi %d · thủ %d · đâm %d · nhiễm %d   |   phage %d · đối thủ %d · cross-feeder %d · biofilm %d      [N] đổi chủng · [B] sổ tay" % [
+		s["name"], int(col.nutrient_budget / AgentColony.NUT_BUDGET_MAX * 100.0),
+		col.population(), t[AgentColony.EAT], t[AgentColony.DIVIDE],
+		t[AgentColony.DEFEND], t[AgentColony.STAB], t[AgentColony.INFECTED],
+		col.phages.size(), col.rivals.size(), col.crossfeeders.size(), col.buildings.size()]
 
 	_toast_lbl.visible = _toast_t > 0.0 and not _card_shown and not _book_shown
 	if _toast_lbl.visible:
@@ -501,13 +592,15 @@ func _update_hud() -> void:
 
 # ─────────────────────────── hiệu ứng combat + âm thanh ───────────────────────────
 
-func _spawn_fx(pos: Vector2, kind: String) -> void:
+func _spawn_fx(pos: Vector2, kind: String, to: Vector2 = Vector2.INF) -> void:
 	var life := 0.3
 	match kind:
 		"toxin": life = 0.35
 		"infect": life = 0.28
 		"lyse": life = 0.5
-	_fx.append({"pos": pos, "kind": kind, "t": 0.0, "life": life, "seed": randf() * TAU})
+		"t6ss": life = 0.26
+	_fx.append({"pos": pos, "kind": kind, "t": 0.0, "life": life, "seed": randf() * TAU,
+		"to": pos if to == Vector2.INF else to})
 	if _fx.size() > 240:
 		_fx.pop_front()
 	_play(kind)
@@ -535,6 +628,21 @@ func _draw_fx() -> void:
 				for k in 7:
 					var a: float = f["seed"] + TAU * k / 7.0
 					draw_circle(pos + Vector2(cos(a), sin(a)) * r, 2.0 * fade + 0.6, Color(PHAGE_COL, fade))
+			"t6ss":                                    # T6SS: cú ĐÂM giáo (đâm ra rồi rút)
+				var to: Vector2 = f["to"]
+				var dir: Vector2 = to - pos
+				if dir.length() < 0.01:
+					dir = Vector2(1, 0)
+				var ang := dir.angle()
+				var thrust := sin(pr * PI)               # 0 → 1 → 0: đâm ra rồi rút về
+				var reach := lerpf(5.0, maxf(dir.length(), AgentColony.T6SS_RANGE), thrust)
+				var native := _tex_spear.get_size().x
+				draw_set_transform(pos, ang, Vector2(reach / native, 1.0))
+				draw_texture(_tex_spear, Vector2(0, -_tex_spear.get_size().y * 0.5),
+					Color(1, 1, 1, 0.4 + 0.6 * thrust))
+				draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+				if thrust > 0.5:                         # loé đỏ chỗ trúng
+					draw_circle(pos + dir.normalized() * reach, 3.0 * thrust, Color(1.0, 0.35, 0.28, fade))
 
 
 func _build_audio() -> void:
@@ -543,7 +651,8 @@ func _build_audio() -> void:
 		pl.volume_db = -8.0
 		add_child(pl)
 		_players.append(pl)
-	for kind in ["toxin", "infect", "lyse", "phage_wave", "biofilm_formed", "crossfeeder"]:
+	for kind in ["toxin", "infect", "lyse", "phage_wave", "biofilm_formed", "crossfeeder",
+			"t6ss", "rival"]:
 		_sounds[kind] = _make_sound(kind)
 
 
@@ -570,6 +679,12 @@ func _make_sound(kind: String) -> AudioStreamWAV:
 			"crossfeeder":
 				s = sin(TAU * (500.0 + 300.0 * tt) * tt)
 				env = exp(-tt * 8.0)
+			"t6ss":                                     # cú đâm: nhiễu ngắn, đanh
+				s = (randf() * 2.0 - 1.0) * 0.7 + sin(TAU * 320.0 * tt) * 0.3
+				env = exp(-tt * 34.0)
+			"rival":                                    # đối thủ tới: tiếng trầm đe doạ
+				s = sin(TAU * (120.0 - 60.0 * tt) * tt)
+				env = exp(-tt * 5.0)
 		var v := int(clampf(s * env, -1.0, 1.0) * 30000.0)
 		data[i * 2] = v & 0xff
 		data[i * 2 + 1] = (v >> 8) & 0xff

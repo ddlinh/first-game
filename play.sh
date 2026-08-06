@@ -37,6 +37,10 @@ game)
 	# Bản chính (main_scene = proto2/Agents.tscn).
 	exec "$(find_godot)" --path "$here/godot"
 	;;
+yogurt)
+	# Màn YAOURT (city-builder cấp vi sinh, đích pH 4.6).
+	exec "$(find_godot)" --path "$here/godot" res://proto2/Yogurt.tscn
+	;;
 check)
 	# Test headless cho lõi mô phỏng agent, không cần cửa sổ.
 	"$(find_godot)" --headless --path "$here/godot" --script proto2/check.gd
@@ -46,7 +50,7 @@ shot)
 	"$(find_godot)" --path "$here/godot" --script proto2/shot.gd
 	;;
 *)
-	echo "Dùng: ./play.sh [game|check|shot]" >&2
+	echo "Dùng: ./play.sh [game|yogurt|check|shot]" >&2
 	exit 2
 	;;
 esac

@@ -13,12 +13,16 @@ extends RefCounted
 ##    (cần mật độ vật chủ cao); cross-feeder bén vào chỗ PHẾ PHẨM đọng (niche trống).
 ##  · BIOFILM do chính khuẩn tiết ra, chỉ ở chỗ ĐỦ ĐÔNG (quorum sensing) — người chơi
 ##    chỉ CHỈ ĐỊNH, cụm phải đạt mật độ thì mới kết được.
+##  · CẠNH TRANH LIÊN KHUẨN: một chủng RIVAL trôi vào tranh niche dinh dưỡng. Khuẩn nhà
+##    diệt nó bằng T6SS — vũ khí ĐÂM-CHẠM (contact-dependent), khác hẳn colicin (khuếch
+##    tán, tầm xa, diệt phage). T6SS là nanomachine co rút đồng nguồn với đuôi phage.
 
-enum { FORAGE, EAT, DIVIDE, DORMANT, DEFEND, INFECTED, BUILD }
+enum { FORAGE, EAT, DIVIDE, DORMANT, DEFEND, INFECTED, BUILD, STAB }
 
 const STATE_NAME := {
 	FORAGE: "kiếm ăn", EAT: "đang ăn", DIVIDE: "phân đôi", DORMANT: "ngủ đông",
 	DEFEND: "phòng thủ", INFECTED: "nhiễm phage", BUILD: "xây biofilm",
+	STAB: "đâm giáo (T6SS)",
 }
 
 const DISH_R := 300.0
@@ -86,13 +90,33 @@ const THREAT_WAVE := 5
 const THREAT_COOLDOWN := 15.0
 const THREAT_GRACE := 8.0
 
+# ── chủng RIVAL cạnh tranh + T6SS (đâm-chạm, khác colicin khuếch tán) ──
+const RIVAL_MAX := 5
+const RIVAL_POP := 28           ## khuẩn lạc thịnh → đối thủ trôi vào tranh niche
+const RIVAL_WAVE := 3
+const RIVAL_COOLDOWN := 13.0
+const RIVAL_LIFE := 40.0
+const RIVAL_SPEED := 34.0
+const RIVAL_EAT := 0.6          ## rival cũng ăn dinh dưỡng (cạnh tranh kinh tế)
+const T6SS_SENSE := 26.0        ## khuẩn nhà "thấy" rival trong tầm này thì lao tới đâm
+const T6SS_RANGE := 12.0        ## CHẠM mới đâm được (contact-dependent) — khác colicin tầm 30
+const T6SS_COOLDOWN := 0.6
+
 var agents: Array = []
 var nut := PackedFloat32Array()
 var waste := PackedFloat32Array()
 var phages: Array = []
 var buildings: Array = []
 var crossfeeders: Array = []   ## {pos, heading, prev, life}
+var rivals: Array = []         ## chủng cạnh tranh {pos, heading, prev, life, cd}
 var rng := RandomNumberGenerator.new()
+
+## RẢI THỨC ĂN LÀ MỘT NGHỀ: ngân sách dinh dưỡng có hạn, hồi theo thời gian → rải ở đâu
+## mới đáng. Rải lên chỗ đã bão hoà (trường chạm trần FIELD_MAX) là PHÍ ngân sách → kỹ
+## năng là "đón đầu rìa đang mọc". Người chơi dùng deposit(); add_nutrient() vẫn thô (test).
+const NUT_BUDGET_MAX := 120.0
+const NUT_REGEN := 14.0        ## hồi/giây
+var nutrient_budget := NUT_BUDGET_MAX
 
 ## Đặc tính CHỦNG × MÔI TRƯỜNG — một màn cấu hình một tổ hợp (xem set_environment):
 ##   motility      : đặc tính chủng, 0 = không di động (giữ hình), 1 = bơi khoẻ (lan)
@@ -109,6 +133,7 @@ var events: Array = []
 var auto_threat := true
 var _threat_cd := 0.0
 var _cf_cd := 0.0
+var _rival_cd := 0.0
 var _form_timer := 0.0
 
 
@@ -138,13 +163,16 @@ func reset() -> void:
 	phages.clear()
 	buildings.clear()
 	crossfeeders.clear()
+	rivals.clear()
 	events.clear()
 	for i in nut.size():
 		nut[i] = 0.0
 		waste[i] = 0.0
 	elapsed = 0.0
+	nutrient_budget = NUT_BUDGET_MAX
 	_threat_cd = THREAT_GRACE
 	_cf_cd = THREAT_GRACE
+	_rival_cd = THREAT_GRACE
 	_form_timer = 0.0
 	for i in 10:
 		agents.append(_new_agent(_rand_in_dish(70.0), 0.55))
@@ -205,6 +233,18 @@ func add_nutrient(pos: Vector2, amount: float) -> void:
 			if f > 0.0:
 				var i := cy * NF + cx
 				nut[i] = minf(FIELD_MAX, nut[i] + strength * f)
+
+
+## Rải của NGƯỜI CHƠI — tiêu ngân sách, không rải quá cái đang có. Trả về lượng đã rải
+## thật (để view phản hồi). Rải lên chỗ bão hoà vẫn tốn ngân sách mà trường không tăng
+## thêm (add_nutrient tự chặn ở FIELD_MAX) → "phí", đó là chỗ để rèn kỹ năng đón rìa.
+func deposit(pos: Vector2, amount: float) -> float:
+	var applied := minf(amount, nutrient_budget)
+	if applied <= 0.0:
+		return 0.0
+	add_nutrient(pos, applied)
+	nutrient_budget -= applied
+	return applied
 
 
 func _add_nut(pos: Vector2, amt: float) -> void:
@@ -324,8 +364,16 @@ func population() -> int:
 	return agents.size()
 
 
+func spawn_rivals(n: int) -> void:
+	for i in n:
+		var a := TAU * i / maxf(1.0, float(n)) + rng.randf()
+		var ang := rng.randf() * TAU
+		rivals.append({"pos": Vector2(cos(a), sin(a)) * (DISH_R - 12.0),
+			"heading": Vector2(cos(ang), sin(ang)), "prev": 0.0, "life": RIVAL_LIFE, "cd": 0.0})
+
+
 func tally() -> Dictionary:
-	var t := {FORAGE: 0, EAT: 0, DIVIDE: 0, DORMANT: 0, DEFEND: 0, INFECTED: 0, BUILD: 0}
+	var t := {FORAGE: 0, EAT: 0, DIVIDE: 0, DORMANT: 0, DEFEND: 0, INFECTED: 0, BUILD: 0, STAB: 0}
 	for a in agents:
 		t[a["state"]] += 1
 	return t
@@ -335,6 +383,7 @@ func tally() -> Dictionary:
 
 func update(delta: float) -> void:
 	elapsed += delta
+	nutrient_budget = minf(NUT_BUDGET_MAX, nutrient_budget + NUT_REGEN * delta)
 	nut = _diffused(nut, delta, FIELD_DECAY)
 	waste = _diffused(waste, delta, WASTE_DECAY)
 
@@ -355,6 +404,12 @@ func update(delta: float) -> void:
 					"prev": 0.0, "life": CF_LIFE})
 				_cf_cd = CF_COOLDOWN
 				events.append({"kind": "crossfeeder"})
+		# Khuẩn lạc thịnh → chủng RIVAL trôi vào tranh niche (khuẩn nhà diệt bằng T6SS).
+		_rival_cd -= delta
+		if _rival_cd <= 0.0 and rivals.size() < RIVAL_MAX and population() >= RIVAL_POP:
+			spawn_rivals(RIVAL_WAVE)
+			_rival_cd = RIVAL_COOLDOWN
+			events.append({"kind": "rival", "pop": population()})
 		_maybe_form_biofilm(delta)
 
 	_recruit_builders()
@@ -376,6 +431,7 @@ func update(delta: float) -> void:
 	phages = phages.filter(func(p): return not p.get("dead", false))
 
 	_step_crossfeeders(delta)
+	_step_rivals(delta)
 
 
 func _find_waste_niche():
@@ -434,7 +490,11 @@ func _step_agent(a: Dictionary, delta: float, newborns: Array, new_phages: Array
 					# Không di động: gần như đứng yên, chỉ nhích rất chậm về phía có ăn.
 					a["pos"] += _best_nutrient_dir(a["pos"]) * SPEED * 0.12 * delta
 					a["vel"] = Vector2.ZERO
-			if _phage_near(a["pos"], DEFEND_RANGE) and not _sheltered(a["pos"]):
+			# Rival ở sát (đâm-chạm) được ưu tiên hơn phage (khuếch tán, tầm xa).
+			if _nearest_rival(a["pos"], T6SS_SENSE) != null:
+				a["state"] = STAB
+				a["timer"] = 0.0
+			elif _phage_near(a["pos"], DEFEND_RANGE) and not _sheltered(a["pos"]):
 				a["state"] = DEFEND
 				a["timer"] = 0.0
 
@@ -449,6 +509,9 @@ func _step_agent(a: Dictionary, delta: float, newborns: Array, new_phages: Array
 			if a["energy"] >= DIVIDE_ENERGY and agents.size() + newborns.size() < MAX_POP:
 				a["state"] = DIVIDE
 				a["timer"] = DIVIDE_TIME
+			elif _nearest_rival(a["pos"], T6SS_SENSE) != null:
+				a["state"] = STAB
+				a["timer"] = 0.0
 			elif _phage_near(a["pos"], DEFEND_RANGE) and not _sheltered(a["pos"]):
 				a["state"] = DEFEND
 				a["timer"] = 0.0
@@ -482,6 +545,21 @@ func _step_agent(a: Dictionary, delta: float, newborns: Array, new_phages: Array
 					events.append({"kind": "toxin", "pos": a["pos"]})
 			if not _phage_near(a["pos"], DEFEND_RANGE):
 				a["state"] = FORAGE
+
+		STAB:
+			# T6SS: phải CHẠM mới đâm được. Không có rival trong tầm cảm → thôi.
+			var target = _nearest_rival(a["pos"], T6SS_SENSE)
+			if target == null:
+				a["state"] = FORAGE
+			else:
+				a["timer"] -= delta
+				if a["pos"].distance_to(target["pos"]) > T6SS_RANGE:
+					_swim(a, target["pos"], delta)   # lao tới cho chạm
+				elif a["timer"] <= 0.0:
+					target["dead"] = true              # đâm thủng → rival chết
+					a["timer"] = T6SS_COOLDOWN
+					a["flash"] = 0.2
+					events.append({"kind": "t6ss", "pos": a["pos"], "to": target["pos"]})
 
 		INFECTED:
 			a["timer"] -= delta
@@ -560,6 +638,67 @@ func _step_crossfeeders(delta: float) -> void:
 			var ang2 := rng.randf() * TAU
 			c["heading"] = Vector2(cos(ang2), sin(ang2))
 	crossfeeders = crossfeeders.filter(func(c): return c["life"] > 0.0)
+
+
+## Chủng RIVAL: dò dinh dưỡng bằng run-and-tumble, ĂN nó (cạnh tranh), và cũng có T6SS —
+## đâm chết khuẩn nhà khi CHẠM nếu con đó không kịp đâm lại và không được biofilm che.
+func _step_rivals(delta: float) -> void:
+	for c in rivals:
+		c["life"] -= delta
+		c["cd"] = maxf(0.0, c["cd"] - delta)
+		var cur := nutrient_at(c["pos"])
+		if cur > EAT_MIN:
+			_deplete_nut(c["pos"], RIVAL_EAT * delta)   # tranh ăn của khuẩn nhà
+		var improving: bool = cur > float(c["prev"]) + 0.0005
+		var tumble := TUMBLE_HAPPY if improving else TUMBLE_SAD
+		if rng.randf() < tumble:
+			var ang := rng.randf() * TAU
+			c["heading"] = Vector2(cos(ang), sin(ang))
+		c["prev"] = cur
+		# Kẻ xâm lấn nhắm vào NICHE đang bị chiếm: lệch hướng về khuẩn nhà gần nhất.
+		var prey = _nearest_target(c["pos"])
+		if prey != null:
+			var to_prey: Vector2 = (prey["pos"] - c["pos"]).normalized()
+			c["heading"] = (c["heading"] + to_prey * 0.9).normalized()
+		c["pos"] += c["heading"] * RIVAL_SPEED * delta
+		if c["pos"].length() > DISH_R - 8.0:
+			c["pos"] = c["pos"].normalized() * (DISH_R - 8.0)
+			var ang2 := rng.randf() * TAU
+			c["heading"] = Vector2(cos(ang2), sin(ang2))
+		if c["cd"] <= 0.0:
+			var victim = _rival_victim(c["pos"])
+			if victim != null:
+				victim["dead"] = true
+				c["cd"] = T6SS_COOLDOWN
+				events.append({"kind": "t6ss", "pos": c["pos"], "to": victim["pos"]})
+	rivals = rivals.filter(func(c): return c["life"] > 0.0 and not c.get("dead", false))
+
+
+## Khuẩn nhà mà rival đâm được: trong tầm CHẠM, không đang đâm lại (STAB), không được che.
+func _rival_victim(pos: Vector2):
+	var rr := T6SS_RANGE * T6SS_RANGE
+	for a in agents:
+		if a.get("dead", false) or a["state"] == STAB or a["state"] == INFECTED:
+			continue
+		if _sheltered(a["pos"]):
+			continue
+		if pos.distance_squared_to(a["pos"]) <= rr:
+			return a
+	return null
+
+
+func _nearest_rival(pos: Vector2, r: float):
+	var rr := r * r
+	var best = null
+	var best_d := rr
+	for c in rivals:
+		if c.get("dead", false):
+			continue
+		var d: float = pos.distance_squared_to(c["pos"])
+		if d <= best_d:
+			best_d = d
+			best = c
+	return best
 
 
 func _step_phages(delta: float) -> void:

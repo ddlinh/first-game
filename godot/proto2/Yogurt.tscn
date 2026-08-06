@@ -1,0 +1,8 @@
+[gd_scene load_steps=2 format=3]
+
+; Màn YAOURT: một node duy nhất, mọi thứ (hũ, đồng hồ, HUD) vẽ/dựng trong mã.
+
+[ext_resource type="Script" path="res://proto2/yogurt_view.gd" id="1_yogurt"]
+
+[node name="YogurtView" type="Node2D"]
+script = ExtResource("1_yogurt")

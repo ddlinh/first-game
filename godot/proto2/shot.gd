@@ -28,7 +28,8 @@ func _process(_delta: float) -> bool:
 		pending = true
 		RenderingServer.frame_post_draw.connect(_grab.bind("_shot-agents-a.png"), CONNECT_ONE_SHOT)
 	elif frames == 40:
-		view.col.spawn_phages(16)
+		view.col.spawn_phages(12)
+		view.col.spawn_rivals(4)     # cho thấy T6SS đâm rival
 		for _i in 16:
 			view.col.update(0.04)   # tua ngắn: bắt lúc combat đang diễn ra
 	elif frames == 42:
