@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rekindled - Master Concept & System Architecture Document</title>
+    <style>
+        :root {
+            --bg-color: #0c0e12;
+            --card-bg: #15181e;
+            --card-border: #262c38;
+            --text-main: #e2e8f0;
+            --text-muted: #8a99ad;
+            --accent-ember: #ff6b35;
+            --accent-amber: #f7c59f;
+            --accent-gold: #ffb703;
+            --accent-blue: #2ec4b6;
+            --accent-pixel-green: #38b000;
+            --table-header: #1f242e;
+            --code-bg: #08090c;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            line-height: 1.6;
+            padding: 40px 20px;
+        }
+
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            padding-bottom: 40px;
+            border-bottom: 2px solid var(--card-border);
+            margin-bottom: 40px;
+        }
+
+        .badge {
+            display: inline-block;
+            background: rgba(255, 107, 53, 0.15);
+            color: var(--accent-ember);
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            border: 1px solid rgba(255, 107, 53, 0.4);
+            margin-bottom: 15px;
+        }
+
+        h1 {
+            font-size: 2.8rem;
+            color: #ffffff;
+            margin-bottom: 12px;
+            letter-spacing: -0.5px;
+            text-shadow: 0 0 20px rgba(255, 107, 53, 0.25);
+        }
+
+        .subtitle {
+            color: var(--accent-amber);
+            font-size: 1.15rem;
+            font-weight: 400;
+            max-width: 850px;
+            margin: 0 auto;
+        }
+
+        .section-card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 12px;
+            padding: 35px;
+            margin-bottom: 40px;
+            box-shadow: 0 12px 35px rgba(0,0,0,0.45);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .section-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 5px;
+            height: 100%;
+            background: linear-gradient(180deg, var(--accent-ember) 0%, var(--accent-gold) 100%);
+        }
+
+        h2 {
+            font-size: 1.55rem;
+            color: #ffffff;
+            margin-bottom: 22px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            border-bottom: 1px solid var(--card-border);
+            padding-bottom: 12px;
+        }
+
+        h3 {
+            font-size: 1.2rem;
+            color: var(--accent-amber);
+            margin: 24px 0 12px 0;
+        }
+
+        h4 {
+            font-size: 1.05rem;
+            color: var(--accent-gold);
+            margin: 16px 0 8px 0;
+        }
+
+        p {
+            margin-bottom: 16px;
+            color: var(--text-main);
+        }
+
+        ul, ol {
+            margin-bottom: 18px;
+            padding-left: 22px;
+        }
+
+        li {
+            margin-bottom: 10px;
+        }
+
+        strong {
+            color: #ffffff;
+        }
+
+        .diagram-container {
+            background: var(--code-bg);
+            border: 1px solid #2a3240;
+            border-radius: 10px;
+            padding: 24px;
+            margin: 22px 0;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.6);
+        }
+
+        .flow-grid {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+        }
+
+        .flow-card {
+            background: #12151b;
+            border: 1px solid #2e3646;
+            border-radius: 8px;
+            padding: 16px 20px;
+            flex: 1;
+            min-width: 200px;
+            text-align: center;
+            position: relative;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+
+        .flow-card.accent-ember { border-color: var(--accent-ember); }
+        .flow-card.accent-blue { border-color: var(--accent-blue); }
+        .flow-card.accent-gold { border-color: var(--accent-gold); }
+
+        .flow-card-title {
+            font-weight: 700;
+            color: #ffffff;
+            font-size: 0.95rem;
+            margin-bottom: 6px;
+        }
+
+        .flow-card-desc {
+            font-size: 0.82rem;
+            color: var(--text-muted);
+            line-height: 1.4;
+        }
+
+        .flow-arrow {
+            color: var(--accent-ember);
+            font-size: 1.4rem;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        @media (max-width: 768px) {
+            .flow-grid {
+                flex-direction: column;
+            }
+            .flow-arrow {
+                transform: rotate(90deg);
+            }
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 22px 0;
+            background: #111318;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+
+        th, td {
+            padding: 14px 18px;
+            text-align: left;
+            border-bottom: 1px solid var(--card-border);
+            font-size: 0.92rem;
+            vertical-align: top;
+        }
+
+        th {
+            background-color: var(--table-header);
+            color: var(--accent-amber);
+            font-weight: 600;
+        }
+
+        tr:hover {
+            background-color: rgba(255, 255, 255, 0.02);
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        .callout {
+            background: rgba(255, 107, 53, 0.08);
+            border-left: 4px solid var(--accent-ember);
+            padding: 18px 20px;
+            border-radius: 0 8px 8px 0;
+            margin: 20px 0;
+            font-size: 0.95rem;
+        }
+
+        .callout-blue {
+            background: rgba(46, 196, 182, 0.08);
+            border-left: 4px solid var(--accent-blue);
+            padding: 18px 20px;
+            border-radius: 0 8px 8px 0;
+            margin: 20px 0;
+            font-size: 0.95rem;
+        }
+
+        .timeline-box {
+            position: relative;
+            padding-left: 30px;
+            border-left: 2px dashed var(--accent-ember);
+            margin: 25px 0 25px 10px;
+        }
+
+        .timeline-item {
+            position: relative;
+            margin-bottom: 30px;
+        }
+
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -37px;
+            top: 4px;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--accent-ember);
+            box-shadow: 0 0 10px var(--accent-ember);
+        }
+
+        .art-tag {
+            display: inline-block;
+            background: rgba(56, 176, 0, 0.15);
+            color: var(--accent-pixel-green);
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            border: 1px solid rgba(56, 176, 0, 0.3);
+            margin-right: 6px;
+        }
+
+        .history-card {
+            background: #111318;
+            border: 1px solid #2a3240;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .history-title {
+            color: var(--accent-gold);
+            font-weight: 700;
+            font-size: 1.1rem;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px dashed #2a3240;
+            padding-bottom: 8px;
+        }
+
+        .history-tag {
+            background: rgba(255, 183, 3, 0.15);
+            color: var(--accent-gold);
+            font-size: 0.75rem;
+            padding: 2px 8px;
+            border-radius: 4px;
+            border: 1px solid rgba(255, 183, 3, 0.3);
+        }
+
+        .dep-tag {
+            background: rgba(46, 196, 182, 0.15);
+            color: var(--accent-blue);
+            font-size: 0.8rem;
+            padding: 2px 8px;
+            border-radius: 4px;
+            border: 1px solid rgba(46, 196, 182, 0.3);
+            display: inline-block;
+            margin-bottom: 10px;
+        }
+
+        footer {
+            text-align: center;
+            padding-top: 30px;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            border-top: 1px solid var(--card-border);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <span class="badge">Master System Design & Concept Document</span>
+            <h1>REKINDLED</h1>
+            <div class="subtitle">A Post-Apocalyptic 1 to 4 Player Roguelite Farming & Civilization-Rebuilding Game</div>
+        </header>
+
+        <!-- SECTION 1 -->
+        <div class="section-card">
+            <h2>1. PROJECT OVERVIEW & DESIGN PHILOSOPHY</h2>
+            <p><strong>REKINDLED</strong> is a <strong>1 to 4 Player (Solo & Co-op)</strong> Roguelite featuring Farming & Settlement Meta-progression set in a post-apocalyptic world where human civilization has collapsed into ash. Unlike traditional roguelites focused solely on looting weapons or inanimate materials, the most valuable resources in <em>Rekindled</em> are <strong>People</strong> and the <strong>Vocational Knowledge</strong> they preserve.</p>
+            
+            <div class="callout">
+                <strong>Core Philosophy:</strong> Civilization resides not in stones or objects, but in the people who hold the crafts. Every survivor rescued from the underground ruins is an ember blown back to reignite human society.
+            </div>
+
+            <h3>Player Scale Flexibility (1 to 4 Players)</h3>
+            <p>The game seamlessly supports both <strong>Solo Play</strong> and <strong>Multiplayer Co-op (up to 4 players)</strong>. Dynamic scaling adjusts enemy health, spawn density, and resource drop rates according to party size. In solo play, players can recruit AI Mercenary Companions from the village to assist in dungeon runs.</p>
+
+            <h3>Dual-Layer Gameplay Loop</h3>
+            <ul>
+                <li><strong>Expedition Layer (Roguelite Run):</strong> Procedurally generated dungeon crawls into ancient subterranean ruins. Permadeath applies to personal run loot. Main Goal: Rescue trapped survivors, collect "Knowledge Relics" (blueprints, seed specimens, machinery parts), and collect temporary combat buffs.</li>
+                <li><strong>Settlement Layer (Persistent Village Meta):</strong> The shared surface village. Never reset upon death. Houses farming, crafting, research, and village growth. As the population grows, the village automates production and supplies future expeditions.</li>
+            </ul>
+
+            <!-- Visual Diagram 1: Dual Layer Loop -->
+            <div class="diagram-container">
+                <div class="flow-grid">
+                    <div class="flow-card accent-ember">
+                        <div class="flow-card-title">SUBTERRANEAN RUN</div>
+                        <div class="flow-card-desc">1-4 Players Explore Ruins, Rescue Survivors & Retrieve Knowledge Relics</div>
+                    </div>
+                    <div class="flow-arrow">➔</div>
+                    <div class="flow-card accent-gold">
+                        <div class="flow-card-title">VILLAGE REBUILDING</div>
+                        <div class="flow-card-desc">Assign Villagers, Build Infrastructure & Complete Historical Quests</div>
+                    </div>
+                    <div class="flow-arrow">➔</div>
+                    <div class="flow-card accent-blue">
+                        <div class="flow-card-title">SUPPLY GATE BUFFS</div>
+                        <div class="flow-card-desc">Automated Rations, Forged Weapons & AI Companions for Next Expedition</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SECTION 2 -->
+        <div class="section-card">
+            <h2>2. VISUAL DIRECTION & 2.5D DYNAMIC CAMERA SYSTEM</h2>
+            <p>The visual identity of <em>Rekindled</em> bridges cute pixel charm with 2.5D depth contrast, utilizing high-detail pixel art layered over a 3D environment with dynamic dynamic lighting and smooth zoom capabilities.</p>
+
+            <h3>1. Art Style & Perspective Specifications</h3>
+            <ul>
+                <li><span class="art-tag">Perspective</span><strong>2.5D Isometric / Orthographic Depth:</strong> 2D pixel character billboards rendered inside a 2.5D environment with 3D terrain depth and dynamic shadow casting (similar to <em>Cult of the Lamb</em>, <em>Eiyuden Chronicle</em>, and modern retro RPGs).</li>
+                <li><span class="art-tag">Aesthetics</span><strong>Cute Pixel Art / Modern Retro:</strong> High-resolution pixel art featuring charming, expressive character proportions inspired by <em>Pokémon</em> top-down readability and <em>Cult of the Lamb</em>'s character appeal.</li>
+                <li><span class="art-tag">Proportions</span><strong>Chibi Pixel Silhouettes:</strong> Big-head, compact-body ratios (1:3 scale). Ensures clear character readability across all zoom levels.</li>
+                <li><span class="art-tag">Palette Contrast</span><strong>Dual Tone Palette:</strong>
+                    <ul>
+                        <li><em>Subterranean Ruins:</em> Cold, desaturated pixel palette (ash grey, steel purple, murky indigo). Hostile and dead.</li>
+                        <li><em>Surface Village:</em> Rich, warm palette (ember orange <code>#FF6B35</code>, golden amber, sprout green, soil brown). Warm and vibrant.</li>
+                    </ul>
+                </li>
+                <li><span class="art-tag">VFX</span><strong>Pixel "Rising Embers":</strong> Signature pixel particle effect. Stylized ember sparks rise upward during successful rescues, research breakthroughs, and village upgrades.</li>
+            </ul>
+
+            <h3>2. Dynamic Zoom Mechanics (Zoom In / Zoom Out)</h3>
+            <p>The camera features a seamless multi-tier dynamic zoom system (via mouse wheel or controller triggers) to serve both micro-detail immersion and macro-tactical management:</p>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Zoom Level</th>
+                        <th>Camera Distance</th>
+                        <th>Primary Gameplay Context & Usage</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Close-Up View (Macro-Detail)</strong></td>
+                        <td>0.5x – 0.8x Distance</td>
+                        <td>• High-detail view during NPC dialogues, quest turn-ins, and crafting animation details.<br>• Highlights cute Chibi pixel facial expressions, forge sparks, and crop watering details.<br>• Dramatic camera zoom during boss finisher attacks or campfire rest moments.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Standard View (Combat & Traversal)</strong></td>
+                        <td>1.0x Distance (Default)</td>
+                        <td>• Balanced camera view during dungeon crawls, combat encounters, and general village walking.<br>• Provides clear sightlines for 1-4 players while maintaining character detail and spell VFX clarity.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Tactical Overview (Management)</strong></td>
+                        <td>1.5x – 2.0x Distance</td>
+                        <td>• <strong>Village Grid Mode:</strong> Expands camera to view the full 8x8 village grid, managing workshop placement, adjacency research, and watching Builder NPCs work.<br>• <strong>Boss Arena Mode:</strong> Expands sightlines during large multi-wave swarm encounters or giant Boss fights.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- SECTION 3 -->
+        <div class="section-card">
+            <h2>3. IN-RUN BUFF SYSTEM & ESCORT MECHANICS</h2>
+            <p>To enhance combat depth during runs, players can acquire temporary run-buffs. In the demo, NPC rescues are smooth and streamlined without heavy movement debuffs.</p>
+
+            <h3>1. In-Run Temporary Buffs (Run Power-Ups)</h3>
+            <p>During subterranean expeditions, players discover Ember Shrines, Run Relics, and Combat Drops that provide temporary stackable buffs for the current run:</p>
+            <ul>
+                <li><strong>Weapon Quality Buffs:</strong> Temporarily increases weapon tier, unlocks elemental affinity (Fire, Frost, Electric), or adds attack range/cleave.</li>
+                <li><strong>Speed & Agility Buffs:</strong> Increases movement speed, dash cooldown speed, and attack speed.</li>
+                <li><strong>Armor & Toughness Buffs:</strong> Grants temporary shield layers, flat damage reduction, or knockback immunity.</li>
+            </ul>
+
+            <h3>2. Demo NPC Escort Rules (No Debuffs)</h3>
+            <div class="callout-blue">
+                <strong>Streamlined Demo Rescue:</strong> In the initial Demo build, rescued NPCs do <strong>NOT</strong> inflict movement speed penalties or weapon restrictions on players. Rescuing an NPC immediately activates their active support buff while they follow the party safely to the village portal.
+            </div>
+
+            <h3>3. Full Game "Injured Status" (Post-Demo Mechanics)</h3>
+            <p>In the full release, certain NPCs may carry an "Injured Debuff" requiring carrying/escort tradeoffs, granting unique active professional perks while carried.</p>
+        </div>
+
+        <!-- SECTION 4 -->
+        <div class="section-card">
+            <h2>4. WORKER ALLOCATION & CONSTRUCTION PROGRESSION FLOW</h2>
+            <p>To preserve logical depth and role specialization, construction and production operate on a clear division of labor between <strong>Domain Specialists</strong> and <strong>Builder Engineers</strong>.</p>
+
+            <h3>1. Role Separation Architecture</h3>
+            <ul>
+                <li><strong>Domain Specialists (Farmers, Smiths, Apothecaries, Scholars):</strong> Propose new infrastructure blueprints, establish ingredient requests, and operate completed facilities. They do <em>not</em> physically erect buildings.</li>
+                <li><strong>Builder / Construction Engineers (Industry Pillar):</strong> The dedicated physical construction workforce. They carry materials, construct scaffolding, and erect infrastructure.</li>
+            </ul>
+
+            <h3>2. Dynamic Construction Flow (Pre-Rescue to Automation)</h3>
+            <p>To ensure game progression never halts early on, construction moves through three distinct phases:</p>
+
+            <!-- Visual Diagram 2: Construction Progression Flow -->
+            <div class="diagram-container">
+                <div class="flow-grid">
+                    <div class="flow-card accent-amber">
+                        <div class="flow-card-title">PHASE 1: MANUAL SCAFFOLDING</div>
+                        <div class="flow-card-desc">Before rescuing a Builder NPC, placing a blueprint creates Pixel Scaffolding. Auto-builds at 5% speed, or players manually hammer (E Key) to finish.</div>
+                    </div>
+                    <div class="flow-arrow">➔</div>
+                    <div class="flow-card accent-ember">
+                        <div class="flow-card-title">PHASE 2: BUILDER NPC AUTOMATION</div>
+                        <div class="flow-card-desc">Rescuing a Builder NPC fully automates building! The Builder fetches wood/stone, hammers with dust/spark VFX, building 5x-10x faster.</div>
+                    </div>
+                    <div class="flow-arrow">➔</div>
+                    <div class="flow-card accent-blue">
+                        <div class="flow-card-title">PHASE 3: INDUSTRIAL CRANE TIER</div>
+                        <div class="flow-card-desc">Upgrading the Builder Workshop to Tier 3 unlocks Steam Cranes & Assembly Crews for instant/near-instant city construction.</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="callout">
+                <strong>Early-Game Onboarding Design:</strong> Forcing players to manually hammer their first 1-2 buildings creates a satisfying emotional connection ("laying the first stones of civilization by hand"). Rescuing the first Builder NPC then triggers a huge <strong>Automation Reward Moment</strong> as the Builder takes over all construction labor.
+            </div>
+        </div>
+
+        <!-- SECTION 5 -->
+        <div class="section-card">
+            <h2>5. HISTORICALLY-GROUNDED QUEST DEPENDENCY SYSTEM</h2>
+            <p>Quests in <em>Rekindled</em> follow strict historical progression and operate on a <strong>Prerequisite Dependency Tree</strong> (Quest A unlocks Quest B). The 5 Anchor Quests below represent major epoch landmarks (Demo includes Quest 1 & 2; Full Game expands into 20+ sub-quests).</p>
+
+            <h3>Quest Prerequisite Tree (Dependency Flowchart)</h3>
+            <!-- Visual Diagram 3: Dependency Flowchart -->
+            <div class="diagram-container">
+                <div class="flow-grid">
+                    <div class="flow-card accent-ember">
+                        <div class="flow-card-title">QUEST 1 (DEMO)</div>
+                        <div class="flow-card-desc">Norfolk Crop Rotation<br><em>(Agriculture Starter)</em></div>
+                    </div>
+                    <div class="flow-arrow">➔</div>
+                    <div class="flow-card accent-ember">
+                        <div class="flow-card-title">QUEST 2 (DEMO)</div>
+                        <div class="flow-card-desc">Hydraulic Bloomery Forge<br><em>(Metallurgy Tier 1)</em></div>
+                    </div>
+                    <div class="flow-arrow">➔</div>
+                    <div class="flow-card accent-gold">
+                        <div class="flow-card-title">QUEST 3 (FULL GAME)</div>
+                        <div class="flow-card-desc">Gutenberg Printing Press<br><em>(Knowledge Tier 2)</em></div>
+                    </div>
+                    <div class="flow-arrow">➔</div>
+                    <div class="flow-card accent-gold">
+                        <div class="flow-card-title">QUEST 4 (FULL GAME)</div>
+                        <div class="flow-card-desc">Newcomen Steam Engine<br><em>(Infrastructure Tier 2)</em></div>
+                    </div>
+                    <div class="flow-arrow">➔</div>
+                    <div class="flow-card accent-blue">
+                        <div class="flow-card-title">QUEST 5 (FULL GAME)</div>
+                        <div class="flow-card-desc">Penicillin Mold Lab<br><em>(Healthcare Tier 3)</em></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quest 1 -->
+            <div class="history-card">
+                <div class="history-title">
+                    <span>1. Norfolk Four-Course Crop Rotation</span>
+                    <span class="history-tag">Epoch 1 — Demo Available</span>
+                </div>
+                <span class="dep-tag">Prerequisite: None (Starter Agriculture Quest)</span>
+                <p><strong>Historical Context:</strong> The 18th-century British Agricultural Revolution eliminated the traditional fallow year by rotating Wheat, Turnips, Barley, and Clover—naturally replenishing nitrogen without depleting the soil.</p>
+                <p><strong>Ingredient Request:</strong> <code>3x Ancient Wheat Seeds</code> + <code>3x Turnip Seeds</code> + <code>3x Nitrogen Clover Seeds</code>.</p>
+                <p><strong>Gameplay Reward:</strong> Unlocks the <strong>"Self-Restoring Quadrant Grid"</strong>. Planting these 4 crops in adjacent 2x2 plots prevents soil degradation forever and grants a passive <strong>+50% yield bonus</strong>.</p>
+            </div>
+
+            <!-- Quest 2 -->
+            <div class="history-card">
+                <div class="history-title">
+                    <span>2. Hydraulic Bloomery & Water-Bellows</span>
+                    <span class="history-tag">Epoch 1 — Demo Available</span>
+                </div>
+                <span class="dep-tag">Prerequisite: Complete Quest 1 (Farmer provides food stamina for forge labor)</span>
+                <p><strong>Historical Context:</strong> Harnessing river waterwheels to drive air bellows increased forge temperatures beyond 1200°C, transforming brittle wrought iron into durable high-carbon steel.</p>
+                <p><strong>Ingredient Request:</strong> <code>5x Crude Iron Ore</code> + <code>2x Giant Wooden Gears</code> + <code>1x Hydraulic Piston Joint</code>.</p>
+                <p><strong>Gameplay Reward:</strong> Upgrades the Hand Forge into the <strong>Hydraulic Forge (Tier 2)</strong>. Automatically pumps air via the river, unlocking the crafting recipe for <strong>Indigo Steel Weapons</strong>.</p>
+            </div>
+
+            <!-- Quest 3 -->
+            <div class="history-card">
+                <div class="history-title">
+                    <span>3. Gutenberg Movable Type Printing Press (1440)</span>
+                    <span class="history-tag">Epoch 2 — Full Game</span>
+                </div>
+                <span class="dep-tag">Prerequisite: Complete Quest 2 (Requires Hydraulic Forge for metal type casting)</span>
+                <p><strong>Historical Context:</strong> Johannes Gutenberg invented movable lead type printing in 1440, enabling mass production of books and accelerating the European Renaissance.</p>
+                <p><strong>Ingredient Request:</strong> <code>5x Lead/Tin Ingot Bars</code> + <code>3x Waterproof Oil Ink Jars</code> + <code>10x Wood-Pulp Paper</code>.</p>
+                <p><strong>Gameplay Reward:</strong> Constructs the <strong>Village Printing Press</strong>. Permanently reduces all research completion times and village tier evolution times by <strong>50%</strong> across the settlement.</p>
+            </div>
+
+            <!-- Quest 4 -->
+            <div class="history-card">
+                <div class="history-title">
+                    <span>4. Newcomen Atmospheric Steam Engine (1712)</span>
+                    <span class="history-tag">Epoch 2 — Full Game</span>
+                </div>
+                <span class="dep-tag">Prerequisite: Complete Quest 2 & 3 (Requires Copper Boiler + Printed Schematics)</span>
+                <p><strong>Historical Context:</strong> Thomas Newcomen built the first practical steam engine in 1712 specifically to pump floodwaters out of deep mine shafts, allowing miners to reach deeper ore veins.</p>
+                <p><strong>Ingredient Request:</strong> <code>1x Copper Boiler Tank</code> + <code>4x Pressure Pipes</code> + 10x Chunk Coal</code>.</p>
+                <p><strong>Gameplay Reward:</strong> Activates the <strong>Newcomen Drainage Pump</strong> at the ruin entrance. Drains flooded dungeon rooms on Floor 3, uncovering secret vault doors and cutting dungeon navigation time by 40%.</p>
+            </div>
+
+            <!-- Quest 5 -->
+            <div class="history-card">
+                <div class="history-title">
+                    <span>5. Penicillin Mold Cultivation (1928)</span>
+                    <span class="history-tag">Epoch 3 — Full Game</span>
+                </div>
+                <span class="dep-tag">Prerequisite: Complete Quest 4 (Requires Steam Boiler for lab distillation)</span>
+                <p><strong>Historical Context:</strong> Alexander Fleming discovered <em>Penicillium</em> mold in 1928, creating the world's first true antibiotic and revolutionizing medicine.</p>
+                <p><strong>Ingredient Request:</strong> <code>2x Blue Bread Mold Samples</code> + <code>3x Bioluminescent Fungi</code> + <code>1x Steam Distiller</code>.</p>
+                <p><strong>Gameplay Reward:</strong> Upgrades the Herbalist to an <strong>Apothecary (Tier 2)</strong>. Unlocks the craftable <strong>Antibiotic Serum</strong>, granting 15 minutes of complete immunity to toxic/poison debuffs during runs.</p>
+            </div>
+        </div>
+
+        <!-- SECTION 6 -->
+        <div class="section-card">
+            <h2>6. CONSTRUCTIBLE BUILDINGS & PROFESSION EVOLUTION MATRIX</h2>
+            <p>A thriving city requires specialized infrastructure. Each Pillar Group features a 3-tier building progression tree that players build and upgrade on the village's grid.</p>
+
+            <h3>Constructible Infrastructure Table (Tier 1 to Tier 3)</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Pillar Group</th>
+                        <th>Tier 1 Buildings (Manual Survival)</th>
+                        <th>Tier 2 Buildings (Mechanization)</th>
+                        <th>Tier 3 Buildings (Industrial Automation)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>1. Agriculture & Nature</strong></td>
+                        <td>• <strong>Raised Crop Bed:</strong> Basic manual planting.<br>• <strong>Compost Silo:</strong> Converts organic debris to soil.<br>• <strong>Raw Seed Storehouse:</strong> Basic inventory.</td>
+                        <td>• <strong>River Irrigation Canal:</strong> Auto-waters crops.<br>• <strong>Grain Windmill:</strong> Processes flour/rations.<br>• <strong>Fermentation Vault:</strong> Long-term food preservation.</td>
+                        <td>• <strong>Hydroponics Greenhouse:</strong> Weatherproof year-round farming.<br>• <strong>Automated Grain Elevator:</strong> Auto-collects & stores crops.<br>• <strong>Bio-Fertilizer Refinery:</strong> Mass crop growth boosts.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>2. Industry & Engineering</strong></td>
+                        <td>• <strong>Primitive Clay Forge:</strong> Hand-hammer weapons.<br>• <strong>Masonry Workbench:</strong> Stone tools/bricks.<br>• <strong>Sawmill Pit:</strong> Manual lumber production.</td>
+                        <td>• <strong>Hydraulic Waterwheel Forge:</strong> Auto-bellows forging.<br>• <strong>Steam Power Workshop:</strong> High-tier machinery parts.<br>• <strong>Mechanical Foundry:</strong> Casts metal ingots & pipes.</td>
+                        <td>• <strong>Industrial Blast Furnace:</strong> Mass steel/titanium alloys.<br>• <strong>Automated Ammunition Works:</strong> Auto-supplies run ammo.<br>• <strong>Assembly Line Hub:</strong> Manufactures advanced gear.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>3. Healthcare & Civil Life</strong></td>
+                        <td>• <strong>Herbalist Shack:</strong> Hand-ground poultices.<br>• <strong>Communal Stew Kettle:</strong> Basic meal buffs.<br>• <strong>Rainwater Well:</strong> Basic clean water source.</td>
+                        <td>• <strong>Apothecary Distillery:</strong> Bottled potions & serums.<br>• <strong>Village Infirmary:</strong> Restores worker stamina.<br>• <strong>Sanitation Aqueduct:</strong> Prevents village disease.</td>
+                        <td>• <strong>Biochemical Lab:</strong> Mutagenic serums & permanent buffs.<br>• <strong>Cryo-Medical Vault:</strong> Instantly revives fallen NPCs.<br>• <strong>Central Kitchen Facility:</strong> Mass high-tier run rations.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>4. Knowledge & Culture</strong></td>
+                        <td>• <strong>Scribe Desk:</strong> Manual manuscript translation.<br>• <strong>Archive Chest:</strong> Preserves ancient documents.</td>
+                        <td>• <strong>Printing Press Workshop:</strong> Replicates blueprints.<br>• <strong>Village Library & Map Room:</strong> Unlocks dungeon maps.<br>• <strong>Town Bell Tower:</strong> Boosts villager morale/speed.</td>
+                        <td>• <strong>Mainframe Data Terminal:</strong> Restores AI archives.<br>• <strong>Telegraph Communications Tower:</strong> Dungeon intel updates.<br>• <strong>Academy Hall:</strong> Master-Apprentice skill sharing.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>5. Defense & Security</strong></td>
+                        <td>• <strong>Wooden Palisade Wall:</strong> Basic village barrier.<br>• <strong>Lookout Watchtower:</strong> Early warning of raids.<br>• <strong>Trapper's Bench:</strong> Basic perimeter traps.</td>
+                        <td>• <strong>Stone Guard Fort:</strong> Defends against heavy raids.<br>• <strong>Water-Driven Ballista Station:</strong> Automated defense.<br>• <strong>Mercenary Barracks:</strong> Trains AI run companions.</td>
+                        <td>• <strong>Perimeter Searchlight Tower:</strong> Reveals stealth quakes.<br>• <strong>Automated Gun Turret Grid:</strong> High-damage defense.<br>• <strong>Armory Vault:</strong> Buffs starting defense gear for runs.</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3>8x8 Grid Alignment & Cross-Research</h3>
+            <div class="diagram-container">
+                <div class="flow-grid">
+                    <div class="flow-card accent-amber">
+                        <div class="flow-card-title">BLACKSMITH WORKSHOP</div>
+                        <div class="flow-card-desc">Fire Element & Metallurgy</div>
+                    </div>
+                    <div class="flow-arrow">+</div>
+                    <div class="flow-card accent-blue">
+                        <div class="flow-card-title">INDIGO DYER STUDIO</div>
+                        <div class="flow-card-desc">Water Element & Pigments</div>
+                    </div>
+                    <div class="flow-arrow">➔</div>
+                    <div class="flow-card accent-ember">
+                        <div class="flow-card-title">INDIGO STEEL BREAKTHROUGH</div>
+                        <div class="flow-card-desc">Crafted Weapons Gain +15% Frost / Stun DMG</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SECTION 7 -->
+        <div class="section-card">
+            <h2>7. CO-OP ECONOMY & VILLAGE SUPPLY LOOP</h2>
+
+            <div class="diagram-container">
+                <div class="flow-grid">
+                    <div class="flow-card accent-ember">
+                        <div class="flow-card-title">EXPEDITION TEAM (1-4 PLAYERS)</div>
+                        <div class="flow-card-desc">Brings Knowledge Relics & Materials from Dungeon Runs</div>
+                    </div>
+                    <div class="flow-arrow">➔</div>
+                    <div class="flow-card accent-gold">
+                        <div class="flow-card-title">SETTLEMENT BUILDERS & FARMS</div>
+                        <div class="flow-card-desc">Processes Crops, Fuels Forges & Expands Facilities</div>
+                    </div>
+                    <div class="flow-arrow">➔</div>
+                    <div class="flow-card accent-blue">
+                        <div class="flow-card-title">VILLAGE SUPPLY GATE</div>
+                        <div class="flow-card-desc">Provides Free Rations, High-Tier Weapons & AI Mercenaries</div>
+                    </div>
+                </div>
+            </div>
+
+            <h3>Village Supply Gate</h3>
+            <p>Before departing on a run, players (1 to 4) visit the <strong>Village Supply Gate</strong> to collect free supplies produced by the village's automated workshops (Energy Rations, Weapons, and AI Mercenaries if solo).</p>
+        </div>
+
+        <!-- SECTION 8 -->
+        <div class="section-card">
+            <h2>8. TECHNICAL FEEDBACK & LIGHTING SHADERS</h2>
+            
+            <h3>Global Warmth Index (GWI Shader System)</h3>
+            <p>A global shader value `GWI` (`0.0` to `1.0`) dynamically alters the game world in real-time:</p>
+            <ul>
+                <li><code>GWI = 0.0</code> (Game Start): Cold grey desaturated tones, thick fog, pitch-black village.</li>
+                <li><code>GWI = 0.5</code> (Mid-Game): Warm amber light beams from workshop windows. Forge glows red.</li>
+                <li><code>GWI = 1.0</code> (End-Game): Full Ember Orange radiance. Floating **Rising Embers** particle system active.</li>
+            </ul>
+        </div>
+
+        <!-- SECTION 9 -->
+        <div class="section-card">
+            <h2>9. FIRST DEMO SCOPE SPECIFICATIONS</h2>
+            <ul>
+                <li><strong>Player Scale:</strong> 1 to 4 Players (Solo with optional AI Companion, or 2-4 Player Co-op).</li>
+                <li><strong>Environment:</strong> 1 Subterranean Ruin biome (3 Floors).</li>
+                <li><strong>Camera System:</strong> 2.5D Isometric perspective with dynamic Zoom In (conversations/animations) & Zoom Out (8x8 village grid/boss fights).</li>
+                <li><strong>Escort Rule:</strong> <strong>NO NPC Injured Debuffs</strong> in Demo. Rescuing NPCs provides immediate active buffs without movement penalty.</li>
+                <li><strong>In-Run Buffs:</strong> Stackable temporary buffs for Weapon Quality/DMG, Movement Speed, and Armor/Shields.</li>
+                <li><strong>Construction Mechanics:</strong> Features Manual Scaffolding Hammering early on, transitioning into Builder NPC automation upon rescue.</li>
+                <li><strong>Constructible Infrastructure:</strong> Includes Tier 1 & Tier 2 buildings for Agriculture (Raised Bed, Windmill) and Metallurgy (Clay Forge, Hydraulic Forge).</li>
+                <li><strong>Demo Quest Scope:</strong> Quest 1 (Norfolk Rotation) & Quest 2 (Hydraulic Forge) available. Quests 3-5 previewed in Tech Tree.</li>
+                <li><strong>Post-Rescue Feedback:</strong> Rescued NPCs at the village request specific ingredients (e.g., seeds/metals) to unlock new crops and forged gear.</li>
+                <li><strong>NPC Pool:</strong> 5 Villagers representing the 5 Pillars (1 per pillar).</li>
+                <li><strong>Evolution Preview:</strong> Test Tier 1 &rarr; Tier 2 evolution for Farmer & Blacksmith.</li>
+                <li><strong>Features:</strong> 8x8 Grid village building, 1 Cross-Research combo (*Indigo Steel*), GWI Lighting Shader, and Rising Embers VFX.</li>
+            </ul>
+        </div>
+
+        <footer>
+            <p>© 2026 REKINDLED — System Design & Master Concept Document</p>
+        </footer>
+    </div>
+</body>
+</html>
