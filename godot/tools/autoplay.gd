@@ -1,7 +1,8 @@
 extends Node
-## AUTOPLAY — a hands-off bot that plays a full loop so you can watch the game's
-## progress: build a cabin → descend → fight husks → rescue → choose gates deeper
-## → clear the boss → return home. Not shipped.
+## AUTOPLAY — a hands-off bot that plays a bounded scenario (not an endless loop) so
+## you can watch the game's arc start to finish: build a cabin → descend → fight husks
+## → rescue → choose gates deeper → bank the run home → one last round of village life
+## → the game ends. Completes MAX_RUNS full runs, then quits. Not shipped.
 ##
 ##   ./play.sh autoplay        (or:  godot --path . res://tools/autoplay.tscn)
 ##
@@ -18,14 +19,19 @@ var _rooms: int = 0                 # gates taken this run (0 = still in the ent
 var _run_started: bool = false      # have we descended yet?
 # Village visit state (reset on entering the village).
 var _was_in_village: bool = false
-var _v_phase: String = "build"      # build → chores → expand → descend
+var _v_phase: String = "build"      # build → chores → expand → descend (→ ending)
 var _first_village: bool = true
+var _runs_done: int = 0             # completed dungeon runs (village entries after a run)
+var _finishing: bool = false        # last village visit — wrap up instead of descending
+var _end_t: float = 0.0             # seconds spent on the closing beat before we quit
+var _place_tries: int = 0           # cabin-placement attempts this visit (retry guard)
 var _poked: Dictionary = {}         # interactables already visited this village trip
 var _chore_deadline: float = 0.0
 var _esub: int = 0                  # expand sub-step
 var _mark: float = 0.0              # scratch timestamp
 var _dash_cd: float = 0.0
 var _atk_pulse: float = 0.0        # cadence timer for tapping attacks (combo chain)
+var _int_pulse: float = 0.0        # cadence timer for tapping interact (hammering a frame)
 var _layer_id: int = 0             # current world layer, to detect room changes
 var _room_clock: float = 0.0       # when we entered the current room
 var _attack_hold: bool = false
@@ -37,10 +43,16 @@ var _avoid_t: float = 0.0
 
 const MOVES := ["move_left", "move_right", "move_up", "move_down"]
 
-# Fast-forward the whole demo. Everything (movement, combat, timers, camera) is
+# The demo is a bounded scenario, not an endless montage: build the village, then
+# complete this many full dungeon runs (descend → fight → rescue → bank home). After
+# the last run the bot returns home, does one closing round of village life, and the
+# game ends. Bump this for a longer showcase.
+const MAX_RUNS := 1
+
+# Playback speed for the whole demo. Everything (movement, combat, timers, camera) is
 # delta-driven, so bumping the engine time scale just makes the bot play faster.
-# Tweak this (≈2–5) to taste. Overridable at launch with `--fast=N`.
-const SPEED := 3.0
+# Default 1× = real time (readable); speed it up at launch with `--fast=N` (up to 8).
+const SPEED := 1.0
 
 func _ready() -> void:
 	# Skip the blocking story intros so the bot flows freely; the non-blocking
@@ -109,9 +121,20 @@ func _on_enter_village() -> void:
 	_esub = 0
 	_vsub = 0
 	_t = 0.0
+	_end_t = 0.0
+	_place_tries = 0
 	_chore_deadline = _clock + 16.0
-	_v_phase = "build" if _first_village else "chores"
-	_announce("Home — tending the village")
+	# Each time we come home from a completed run, that's one run banked. Once we hit
+	# the target, this becomes the final visit: one last round of chores, then the end.
+	if _run_started:
+		_runs_done += 1
+	_finishing = _runs_done >= MAX_RUNS
+	if _finishing:
+		_v_phase = "chores"
+		_announce("Home for good — %d run(s) banked, tending the village one last time" % _runs_done)
+	else:
+		_v_phase = "build" if _first_village else "chores"
+		_announce("Home — tending the village")
 
 # ---------------------------------------------------------------------------
 # Village loop: (first visit) raise a cabin, then every visit do the chores —
@@ -126,12 +149,18 @@ func _tick_village(delta: float) -> void:
 			_phase_chores(delta)
 		"expand":
 			_phase_expand(delta)
+		"ending":
+			_phase_ending(delta)
 		_:
 			_phase_descend(delta)
 
+# Cabin cell — inside the tended clearing (Chebyshev ≤ START_RADIUS) and off-centre
+# so it never lands on the hearth.
+const BUILD_CELL := Vector2i(2, -1)
+
 func _phase_build(delta: float) -> void:
 	match _vsub:
-		0:
+		0:                                          # open the build menu (press B)
 			if GameState.can_afford({"wood": 5, "stone": 2}):
 				_action_event("build_menu")
 				_vsub = 1
@@ -140,62 +169,102 @@ func _phase_build(delta: float) -> void:
 			else:
 				_first_village = false
 				_v_phase = "chores"
-		1:
+		1:                                          # menu up → choose the Cabin (entry 1)
 			var h := _hud()
 			if h != null and bool(h.get("_menu_open")):
-				_key(KEY_1)                        # pick entry 1 (Cabin)
+				_key(KEY_1)
 				_vsub = 2
 				_t = 0.0
 			elif _t > 2.0:
-				_vsub = 3
-		2:
-			var lyr := _layer()
-			if bool(lyr.get("_placing")):
-				var cell: Vector2 = lyr.call("cell_to_world", Vector2i(2, -1))
-				_aim(cell)
-				_action_event("attack")            # left-click places the frame
-				_vsub = 3
-				_t = 0.0
-				_announce("Village: placing a cabin")
+				_finish_build()                     # menu never opened — give up gracefully
+		2:                                          # hover the target cell and let the OS
+			var lyr := _layer()                     # cursor SETTLE before we click, so
+			if bool(lyr.get("_placing")):           # _try_place() reads the right cell
+				_aim(lyr.call("cell_to_world", BUILD_CELL))
+				if _t > 0.25:
+					_vsub = 3
+					_t = 0.0
 			elif _t > 2.0:
-				_vsub = 3
-		_:
-			var sc := _find_prompt("Hammer")
-			if sc != null and _t < 16.0:
-				if _go_to(sc.global_position, 18.0, delta):
-					_tap("interact")
+				_finish_build()
+		3:                                          # click to drop the frame (mouse settled)
+			var lyr2 := _layer()
+			if lyr2 == null or not bool(lyr2.get("_placing")):
+				# Placement already ended (e.g. a prior click landed) — verify below.
+				_vsub = 4
+				_t = 0.0
 			else:
-				_announce("Village: cabin raised — doing the rounds")
-				_first_village = false
-				_v_phase = "chores"
-				_chore_deadline = _clock + 16.0
+				_aim(lyr2.call("cell_to_world", BUILD_CELL))
+				_action_event("attack")
+				_announce("Village: placing a cabin")
+				_vsub = 4
+				_t = 0.0
+		4:                                          # did a frame actually appear? retry if not
+			if _find_frame() != null:
+				_vsub = 5
+				_t = 0.0
+				_int_pulse = 0.0
+			elif _t > 0.5:
+				_place_tries += 1
+				if _place_tries < 4:
+					_vsub = 2                       # re-hover and click again
+					_t = 0.0
+				else:
+					_finish_build()                 # placement won't take — don't hang the demo
+		_:                                          # hammer the frame all the way up (E), then move on
+			var sc := _find_frame()
+			if sc != null and _t < 20.0:
+				if _go_to(sc.global_position, 18.0, delta):
+					# Tap on a cadence: interact is edge-triggered, so a held button only
+					# lands ONE hammer. Release between taps and each one adds a course.
+					_int_pulse -= delta
+					if _int_pulse <= 0.0:
+						_tap("interact")
+						_int_pulse = 0.34
+			else:
+				if sc == null and _place_tries >= 4:
+					_announce("Village: (couldn't seat the cabin frame) — doing the rounds")
+				elif sc != null:
+					_announce("Village: (cabin frame left half-built) — doing the rounds")
+				else:
+					_announce("Village: cabin raised — doing the rounds")
+				_finish_build()
+
+# Leave the build phase for village chores (shared by every build exit path).
+func _finish_build() -> void:
+	_first_village = false
+	_v_phase = "chores"
+	_chore_deadline = _clock + 16.0
 
 # Visit villagers (accept/turn in quests), crop plots (plant/harvest) and any
 # frames (hammer) — one E-tap each, nearest first, until none left or time's up.
 func _phase_chores(delta: float) -> void:
 	if _clock > _chore_deadline:
-		_v_phase = "expand"
+		_after_chores()
 		return
 	var target := _next_chore()
 	if target == null:
-		_v_phase = "expand"
+		_after_chores()
 		return
 	if _go_to(target.global_position, 18.0, delta):
 		_tap("interact")
 		_poked[target.get_instance_id()] = true
 		_announce("Village: %s" % String(target.call("interact_prompt")))
 
+# Chores done: on the final visit head to the ending; otherwise expand and descend again.
+func _after_chores() -> void:
+	_v_phase = "ending" if _finishing else "expand"
+
 func _next_chore() -> Node2D:
 	var p := _player()
 	var best: Node2D = null
 	var bd: float = INF
+	var gate := _supply_gate()
 	for n in get_tree().get_nodes_in_group("interactable"):
 		if not n.has_method("interact_prompt"):
 			continue
 		if _poked.has(n.get_instance_id()):
 			continue
-		var s := String(n.call("interact_prompt"))
-		if "Descend" in s:                         # the gate is the descend phase
+		if n == gate:                              # the gate is the descend phase, not a chore
 			continue
 		if n.has_method("can_interact") and not bool(n.call("can_interact", p)):
 			continue
@@ -227,13 +296,25 @@ func _phase_expand(delta: float) -> void:
 			_v_phase = "descend"
 
 func _phase_descend(delta: float) -> void:
-	var gate := _find_prompt("Descend")
+	var gate := _supply_gate()
 	if gate == null:
 		_drive_toward(_player().global_position + Vector2(0.0, 140.0), delta)
 	elif _go_to(gate.global_position, 18.0, delta):
 		_rooms = 0                                 # a fresh run starts here
 		_tap("interact")
 		_announce("Descending into the ruins")
+
+# The closing beat: the hero is home, the run is banked. Drop back to real time for a
+# calm final hold, announce the ending, then quit — the scenario is complete, no loop.
+func _phase_ending(delta: float) -> void:
+	_release_all()
+	if _end_t == 0.0:
+		Engine.time_scale = 1.0
+		_announce("The ember is rekindled. The village endures. — demo complete")
+	_end_t += delta
+	if _end_t > 4.5:
+		_announce("Autoplay finished.")
+		get_tree().quit()
 
 # ---------------------------------------------------------------------------
 # Dungeon: fight until clear, rescue if safe, then take a gate (deeper, then home).
@@ -254,7 +335,7 @@ func _tick_dungeon(delta: float) -> void:
 	_hold_attack(false)
 	# Room cleared: free any caged survivor before leaving, so they come home and
 	# the village-life / quest loop actually has someone to show.
-	var surv := _find_prompt("Free")
+	var surv := _find_cage()
 	if surv != null:
 		if _go_to(surv.global_position, 18.0, delta):
 			_tap("interact")
@@ -269,7 +350,7 @@ func _fight(enemies: Array, delta: float) -> void:
 		return
 	var edist: float = p.global_position.distance_to(nearest.global_position)
 	# Rescue a caged survivor when no husk is breathing down our neck.
-	var surv := _find_prompt("Free")
+	var surv := _find_cage()
 	if surv != null and edist > 95.0:
 		_hold_attack(false)
 		if _go_to(surv.global_position, 18.0, delta):
@@ -461,17 +542,38 @@ func _nearest(list: Array, from: Vector2) -> Node2D:
 			best = nd
 	return best
 
-# Nearest interactable whose prompt contains `sub` and is currently actionable.
-func _find_prompt(sub: String) -> Node2D:
+# Locale-independent interactable finders. The bot must NOT match on interact_prompt()
+# text — that's translated (EN/VI), so an English substring like "Hammer" silently
+# misses when the game runs in Vietnamese. These key off stable structure instead.
+
+# An un-built build frame (village.Scaffold — the only interactable with a build_id).
+func _find_frame() -> Node2D:
 	var p := _player()
 	for n in get_tree().get_nodes_in_group("interactable"):
-		if not n.has_method("interact_prompt"):
+		if n.get("build_id") == null:
 			continue
 		if n.has_method("can_interact") and not bool(n.call("can_interact", p)):
 			continue
-		if sub in String(n.call("interact_prompt")):
-			return n as Node2D
+		return n as Node2D
 	return null
+
+# A still-caged survivor (survivor.gd is the only interactable exposing free_it()).
+func _find_cage() -> Node2D:
+	var p := _player()
+	for n in get_tree().get_nodes_in_group("interactable"):
+		if not n.has_method("free_it"):
+			continue
+		if n.has_method("can_interact") and not bool(n.call("can_interact", p)):
+			continue
+		return n as Node2D
+	return null
+
+# The village's Supply Gate node (the way down), held directly by the Village layer.
+func _supply_gate() -> Node2D:
+	var l := _layer()
+	if l == null:
+		return null
+	return l.get("_supply_gate") as Node2D
 
 func _announce(s: String) -> void:
 	print("[AUTOPLAY] ", s)

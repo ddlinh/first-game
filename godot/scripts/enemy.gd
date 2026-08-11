@@ -206,9 +206,10 @@ func _physics_process(delta: float) -> void:
 		A_WINDUP: _tick_windup(delta)
 		A_STRIKE: _tick_strike(player, gd, delta)
 		A_RECOVER: _tick_recover(delta)
-	# Keep the red danger zone live while an attack is committed, and clear it one
-	# frame after (so a parry/dodge instantly wipes the threat marker).
-	var want_zone: bool = (_phase == A_WINDUP or _phase == A_STRIKE) and not _dead
+	# Flash the red danger zone on only LATE in the wind-up (and through the strike),
+	# then clear it one frame after — a brief, fair warning right before the blow
+	# rather than a marker that lingers the whole telegraph.
+	var want_zone: bool = _zone_live()
 	if _danger != null and (want_zone or _zone_shown):
 		_zone_shown = want_zone
 		_danger.queue_redraw()
@@ -416,11 +417,12 @@ func _draw_danger() -> void:
 	var prog: float = 1.0
 	if _phase == A_WINDUP:
 		prog = 1.0 - clampf(_phase_t / maxf(_windup, 0.001), 0.0, 1.0)
-	var fill: float = 0.10 + 0.34 * prog
-	var edge: float = 0.35 + 0.5 * prog
+	# Soft, low-opacity fill (no rim outline) so the zone reads as a subtle wash, not
+	# a hard-edged marker. Still fills in toward the strike so the timing stays legible.
+	var fill: float = 0.07 + 0.15 * prog
 	var red := Color(0.95, 0.14, 0.12)
 	if kind == "bomber":
-		_zone_circle(_bomb_radius(), red, fill, edge)
+		_zone_circle(_bomb_radius(), red, fill)
 		return
 	if _ranged:
 		return   # a lobber's danger is its ground marker (drawn red on the Lob orb)
@@ -438,24 +440,32 @@ func _draw_danger() -> void:
 		-perp * w0,
 	])
 	_danger.draw_colored_polygon(quad, Color(red.r, red.g, red.b, fill))
-	var outline := quad
-	outline.append(quad[0])
-	_danger.draw_polyline(outline, Color(red.r, red.g, red.b, edge), 2.0, true)
 	# The Warden also previews the shockwave ring it slams down on landing.
 	if _shockwave:
-		_zone_circle(96.0, red, fill * 0.45, edge * 0.7)
+		_zone_circle(96.0, red, fill * 0.45)
 
-# A filled ground ellipse (a circle squashed onto the floor) with a bright rim.
-func _zone_circle(radius: float, col: Color, fill: float, edge: float) -> void:
+# A filled ground ellipse (a circle squashed onto the floor) — soft fill, no rim.
+func _zone_circle(radius: float, col: Color, fill: float) -> void:
 	var pts := PackedVector2Array()
 	var n: int = 30
 	for i in range(n):
 		var a: float = TAU * float(i) / float(n)
 		pts.append(Vector2(cos(a) * radius, sin(a) * radius * Palette.SQUASH))
 	_danger.draw_colored_polygon(pts, Color(col.r, col.g, col.b, fill))
-	var outline := pts
-	outline.append(pts[0])
-	_danger.draw_polyline(outline, Color(col.r, col.g, col.b, edge), 2.0, true)
+
+# The danger wash only appears for the final stretch of the wind-up (and the strike),
+# so it flashes in just before the blow instead of lingering the whole telegraph. The
+# bomber is exempt: its whole tell is a circle you must clear, so it shows throughout.
+func _zone_live() -> bool:
+	if _dead:
+		return false
+	if _phase == A_STRIKE:
+		return true
+	if _phase == A_WINDUP:
+		if kind == "bomber":
+			return true
+		return _phase_t <= _windup * 0.45
+	return false
 
 # How far the lunge carries, in screen px, so the lane matches the actual reach.
 func _lunge_reach() -> float:
