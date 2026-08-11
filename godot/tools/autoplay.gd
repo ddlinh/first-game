@@ -210,23 +210,30 @@ func _phase_build(delta: float) -> void:
 					_t = 0.0
 				else:
 					_finish_build()                 # placement won't take — don't hang the demo
-		_:                                          # hammer the frame all the way up (E), then move on
+		5:                                          # hammer the frame all the way up (E)
 			var sc := _find_frame()
 			if sc != null and _t < 20.0:
 				if _go_to(sc.global_position, 18.0, delta):
-					# Tap on a cadence: interact is edge-triggered, so a held button only
-					# lands ONE hammer. Release between taps and each one adds a course.
+					# Tap on a slow cadence: interact is edge-triggered, so a held button
+					# only lands ONE hammer. Releasing between taps lets each swing play
+					# out fully and read as a distinct strike (not a blur).
 					_int_pulse -= delta
 					if _int_pulse <= 0.0:
 						_tap("interact")
-						_int_pulse = 0.34
+						_int_pulse = 0.55
+			elif sc == null and _place_tries < 4:
+				_announce("Village: cabin raised — doing the rounds")
+				_vsub = 6                           # linger a beat on the finished cabin
+				_t = 0.0
 			else:
-				if sc == null and _place_tries >= 4:
+				if _place_tries >= 4:
 					_announce("Village: (couldn't seat the cabin frame) — doing the rounds")
-				elif sc != null:
-					_announce("Village: (cabin frame left half-built) — doing the rounds")
 				else:
-					_announce("Village: cabin raised — doing the rounds")
+					_announce("Village: (cabin frame left half-built) — doing the rounds")
+				_finish_build()
+		6:                                          # admire the raised cabin, then move on
+			_stop_move()
+			if _t > 1.4:
 				_finish_build()
 
 # Leave the build phase for village chores (shared by every build exit path).

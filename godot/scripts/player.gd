@@ -154,6 +154,12 @@ var _tex_front: Texture2D = null
 var _tex_back: Texture2D = null
 var _move_dir: Vector2 = Vector2.RIGHT  # last non-zero move dir (dash while idle)
 
+# Work swing — a visible hammer/labour motion played when the hero works a build
+# frame (see play_work), so building reads as an action, not a stand-still.
+const WORK_TIME := 0.34
+var _work_t: float = 0.0
+var _work_dir: Vector2 = Vector2.RIGHT
+
 # Dash / dodge
 var _dash_t: float = 0.0            # remaining dash burst
 var _dash_cd: float = 0.0
@@ -306,6 +312,7 @@ func _tick_timers(delta: float) -> void:
 	if _buffer_t > 0.0: _buffer_t -= delta
 	if _counter_t > 0.0: _counter_t -= delta
 	if _recover_t > 0.0: _recover_t -= delta
+	if _work_t > 0.0: _work_t -= delta
 	if _guard_broken_t > 0.0: _guard_broken_t -= delta
 	if _reset_t > 0.0:
 		_reset_t -= delta
@@ -518,6 +525,8 @@ func _present(delta: float) -> void:
 		_sprite.position = _sprite.position.lerp(Vector2.ZERO, 0.35)
 		_sprite.skew = lerpf(_sprite.skew, 0.0, 0.35)
 		_sprite.scale = _sprite.scale.lerp(_base_scale, 0.35)
+	elif _work_t > 0.0 and not moving:
+		_work_pose()
 	else:
 		_anim_t += delta * (1.0 if moving else 0.7)
 		Iso.walk_anim(_sprite, _base_scale, _anim_t, moving, _face_left)
@@ -579,6 +588,44 @@ func _finisher_pose() -> void:
 	_sprite.scale = Vector2(_base_scale.x * (1.0 + 0.22 * pinch), _base_scale.y * (1.0 - 0.10 * pinch))
 	_sprite.skew = 0.24 * sin(p * TAU)
 	_sprite.flip_h = cos(p * TAU) < 0.0
+
+# Trigger a single hammer/labour swing toward `toward` (a ground direction). Called
+# by build frames (and any future "work" interactable) when the hero works them, so
+# the action is legible — the hero visibly winds up and chops, not stands frozen.
+func play_work(toward: Vector2) -> void:
+	_work_t = WORK_TIME
+	if toward.length() > 0.01:
+		_work_dir = toward.normalized()
+		if absf(toward.x) > 2.0:
+			_face_left = toward.x < 0.0
+
+# The swing itself: rise + lean back on the wind-up, then chop down-and-forward
+# toward the frame — a clear overhead hammer beat.
+func _work_pose() -> void:
+	var p: float = clampf(1.0 - _work_t / WORK_TIME, 0.0, 1.0)
+	var reach: float
+	var lift: float
+	var sx: float = 1.0
+	var sy: float = 1.0
+	if p < 0.34:                              # wind up: lift the hammer, lean back
+		var w: float = _e_out(p / 0.34)
+		reach = -4.0 * w
+		lift = -7.0 * w
+		sy = 1.0 + 0.07 * w
+	else:                                     # chop: swing forward and drive down
+		var s: float = (p - 0.34) / 0.66
+		var r: float = sin(s * PI)
+		reach = lerpf(-4.0, 8.0, _back_out(s))
+		lift = -7.0 + 9.0 * _e_out(s)
+		sx = 1.0 + 0.10 * r
+		sy = 1.0 - 0.09 * r
+	_sprite.position = Iso.offset(_work_dir, reach) + Vector2(0.0, lift)
+	_sprite.scale = Vector2(_base_scale.x * sx, _base_scale.y * sy)
+	_sprite.skew = 0.0
+	if absf(_work_dir.x) > 0.05:
+		_sprite.flip_h = _work_dir.x < 0.0
+	else:
+		_sprite.flip_h = _face_left
 
 # A stretched roll pose during the dodge.
 func _dash_pose() -> void:

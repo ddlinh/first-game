@@ -723,7 +723,15 @@ class Scaffold extends Node2D:
 		if _done:
 			return
 		progress += 0.34
-		Vfx.embers(get_parent(), global_position, 6, Palette.AMBER)
+		# Make the hero visibly swing the hammer toward the frame.
+		if _by is Node2D and _by.has_method("play_work"):
+			_by.call("play_work", global_position - (_by as Node2D).global_position)
+		# Chunky per-strike feedback so the labour reads at a glance: wood chips fly,
+		# a dust puff kicks up, the frame thunks, and the rising % floats off it.
+		Vfx.embers(get_parent(), global_position + Vector2(0.0, -14.0), 8, Palette.WOOD)
+		Vfx.dust(get_parent(), global_position, 6)
+		Vfx.float_text(get_parent(), global_position + Vector2(0.0, -26.0),
+			"%d%%" % int(progress * 100.0), Palette.GOLD_L)
 		_thunk()
 		if progress >= 1.0:
 			_complete()
@@ -737,13 +745,17 @@ class Scaffold extends Node2D:
 			if progress >= 1.0:
 				_complete()
 
-	# Little hammer-shake for feedback.
+	# A punchier hammer-shake + squash so each strike lands with weight.
 	func _thunk() -> void:
 		if _sprite == null:
 			return
 		var tw := _sprite.create_tween()
-		tw.tween_property(_sprite, "position", Vector2(0, -3), 0.05)
-		tw.tween_property(_sprite, "position", Vector2.ZERO, 0.08)
+		tw.tween_property(_sprite, "position", Vector2(0, -6), 0.05)
+		tw.parallel().tween_property(_sprite, "scale",
+			Vector2(Palette.PX * 1.06, Palette.PX * 0.92), 0.05)
+		tw.tween_property(_sprite, "position", Vector2.ZERO, 0.12)
+		tw.parallel().tween_property(_sprite, "scale",
+			Vector2(Palette.PX, Palette.PX), 0.12)
 
 	func _complete() -> void:
 		if _done:
