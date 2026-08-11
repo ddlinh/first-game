@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Game Feedback & Design Proposal Document</title>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --accent-blue: #38bdf8;
+            --accent-green: #4ade80;
+            --accent-amber: #fbbf24;
+            --accent-red: #f87171;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --border-color: #334155;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            line-height: 1.6;
+            margin: 0;
+            padding: 40px 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        header {
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+        }
+
+        h1 {
+            color: var(--accent-blue);
+            font-size: 2rem;
+            margin: 0 0 10px 0;
+        }
+
+        .subtitle {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+        }
+
+        h2 {
+            color: var(--accent-green);
+            font-size: 1.4rem;
+            border-left: 4px solid var(--accent-green);
+            padding-left: 12px;
+            margin-top: 40px;
+            margin-bottom: 20px;
+        }
+
+        h3 {
+            color: var(--accent-amber);
+            font-size: 1.1rem;
+            margin-top: 20px;
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        ul, ol {
+            padding-left: 20px;
+            margin: 10px 0;
+        }
+
+        li {
+            margin-bottom: 8px;
+        }
+
+        .issue-list li strong {
+            color: var(--accent-red);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+            background-color: var(--card-bg);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        th, td {
+            border: 1px solid var(--border-color);
+            padding: 12px;
+            text-align: left;
+            font-size: 0.9rem;
+        }
+
+        th {
+            background-color: #0f172a;
+            color: var(--accent-blue);
+        }
+
+        code {
+            background-color: #0f172a;
+            color: var(--accent-amber);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+
+        .tag {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            margin-right: 5px;
+            text-transform: uppercase;
+        }
+        .tag-flora { background-color: #15803d; color: #fff; }
+        .tag-fauna { background-color: #b91c1c; color: #fff; }
+        .tag-mineral { background-color: #b45309; color: #fff; }
+        .tag-microbe { background-color: #6b21a8; color: #fff; }
+
+        footer {
+            margin-top: 50px;
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            border-top: 1px solid var(--border-color);
+            padding-top: 20px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+
+    <header>
+        <h1>🎮 Game Review & Feature Proposal Document</h1>
+        <div class="subtitle">Focus: Roguelite Core Mechanics, Polish, & Ecosystem Evolution System</div>
+    </header>
+
+    <!-- SECTION 1: CRITICAL FEEDBACK -->
+    <section>
+        <h2>1. Current Build Issues & Feedback (Bug List)</h2>
+        <div class="card">
+            <ul class="issue-list">
+                <li><strong>1. Missing Onboarding:</strong> Lacks tutorial for basic controls, narrative intro, and clear run objectives.</li>
+                <li><strong>2. Camera Jitter/Stutter:</strong> Unstable camera movement ruins the combat smoothness in roguelite runs.</li>
+                <li><strong>3. Missing Directional Sprites:</strong> Character only has a front-facing sprite; missing side and back movement animations.</li>
+                <li><strong>4. Character Scale Issue:</strong> Main character sprite is oversized relative to the screen viewport.</li>
+                <li><strong>5. Collision & Clipping:</strong> No physical barriers; the character clips under and passes through environmental structures.</li>
+                <li><strong>6. Combat UI & Visual Polish:</strong> Battle interface is cluttered and lacks aesthetic quality compared to references like <em>Hades</em> or <em>Cult of the Lamb</em>.</li>
+                <li><strong>7. Lack of Level-up Feedback:</strong> Stat upgrades and power progression upon leveling up are unclear and lack impact.</li>
+                <li><strong>8. Rescued NPC Behavior:</strong> NPCs vanish immediately upon rescue instead of accompanying the player through stages before returning home.</li>
+            </ul>
+        </div>
+    </section>
+
+    <!-- SECTION 2: COMPARATIVE ANALYSIS -->
+    <section>
+        <h2>2. Roguelite Competitor Analysis & Benchmarking</h2>
+        <div class="card">
+            <p>Compared to market leaders (<em>Hades</em>, <em>Cult of the Lamb</em>), the project currently requires improvement in 4 core pillars:</p>
+            <ol>
+                <li><strong>Meta-Progression & Clarity:</strong> Short-term run perks and long-term base upgrades need stronger visual and numerical feedback.</li>
+                <li><strong>Game Feel & Combat "Juice":</strong> Tight collision, accurate sprite directions, and smooth camera work are baseline requirements for fast-paced combat.</li>
+                <li><strong>World Immersion:</strong> NPCs trailing the player or reacting to the environment significantly heightens emotional investment.</li>
+                <li><strong>UI Visual Hierarchy:</strong> Health bars, cooldowns, and status effects must be readable at a glance without obstructing view.</li>
+            </ol>
+        </div>
+    </section>
+
+    <!-- SECTION 3: SYSTEM DESIGN PROPOSAL -->
+    <section>
+        <h2>3. Feature Proposal: Ecosystem Resonance System</h2>
+        <p>A novel progression and weapon evolution mechanics based on natural biology, food webs, and environmental elements.</p>
+
+        <h3>A. Biological Kingdoms (Race/Tộc)</h3>
+        <div class="card">
+            <ul>
+                <li><span class="tag tag-flora">Flora</span> <strong>Plant Kingdom:</strong> Focuses on regeneration, root control, and bio-toxins. <em>Passive: Photosynthesis (Heals in sunlight/standing still).</em></li>
+                <li><span class="tag tag-fauna">Fauna</span> <strong>Animal Kingdom:</strong> Focuses on attack speed, lifesteal, and critical rage. <em>Passive: Predatory Instinct (Increased crit as target HP drops).</em></li>
+                <li><span class="tag tag-mineral">Mineral</span> <strong>Earth Kingdom:</strong> Focuses on damage reduction, poise, and shockwaves. <em>Passive: Mass Density (Converts physical damage taken into area shockwaves).</em></li>
+                <li><span class="tag tag-microbe">Mycelium</span> <strong>Fungi/Microbe Kingdom:</strong> Focuses on infection, decay, and minion spawn. <em>Passive: Spore Network (Infections chain-spread between nearby enemies).</em></li>
+            </ul>
+        </div>
+
+        <h3>B. Elemental Energies (System/Hệ)</h3>
+        <div class="card">
+            <ul>
+                <li><strong>Thermal (Fire/Magma):</strong> Damage over time, explosions, armor melt.</li>
+                <li><strong>Aquatic (Water/Frost):</strong> Slows, freezes, corrosion, fluid area control.</li>
+                <li><strong>Atmospheric (Wind/Lightning):</strong> Chain damage, high mobility, speed boosts.</li>
+                <li><strong>Organic (Poison/Decay):</strong> Stat debuffs, lifesteal, environmental corruption.</li>
+            </ul>
+        </div>
+
+        <h3>C. Weapon Evolution Mechanic: "Food Chain Devour"</h3>
+        <div class="card">
+            <p>Weapons do not use gold/gem upgrades. Instead, weapons <strong>devour biological monster cores</strong> to mutate along evolution trees.</p>
+            <p><code>[Base Weapon] + [Devoured Core Type] = [Mutated Form]</code></p>
+            
+            <p><strong>Example Evolution Path (Base Iron Sword):</strong></p>
+            <ol>
+                <li>Feeds on <strong>Flora Core + Aquatic:</strong> Mutates into <code>Vine Whip-Blade</code> (Attacks drag enemies in and entangle them).</li>
+                <li>Feeds further on <strong>Fauna Core + Organic:</strong> Mutates into <code>Hydra's Brier</code> (Thorn blade that steals enemy HP on hit).</li>
+                <li>Feeds further on <strong>Mineral Core + Thermal:</strong> Reaches Final Form <code>Obsidian Core Breaker</code> (Volcanic glass blade creating magma fissures).</li>
+            </ol>
+        </div>
+
+        <h3>D. Environmental Interaction Matrix</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Element / Target Race</th>
+                    <th>Flora Enemies</th>
+                    <th>Fauna Enemies</th>
+                    <th>Mineral Enemies</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>Thermal (Fire)</strong></td>
+                    <td>Double Burn Damage & Spreads</td>
+                    <td>Triggers Enrage (Higher speed/lower DEF)</td>
+                    <td>Cracks Armor / Reduces Shield</td>
+                </tr>
+                <tr>
+                    <td><strong>Aquatic (Ice)</strong></td>
+                    <td>Slows & Freezes Branches</td>
+                    <td>Reduces Attack Speed</td>
+                    <td>Slippery Terrain / Loss of Poise</td>
+                </tr>
+                <tr>
+                    <td><strong>Microbial (Spores)</strong></td>
+                    <td>Full Mind-Control / Parasite</td>
+                    <td>Decay / Reduces HP Healing</td>
+                    <td>No Effect (Inorganic target)</td>
+                </tr>
+            </tbody>
+        </table>
+    </section>
+
+    <footer>
+        <p>Document generated for internal Game Design Review • Roguelite Project 2026</p>
+    </footer>
+
+</div>
+
+</body>
+</html>

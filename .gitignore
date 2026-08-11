@@ -7,6 +7,8 @@ export_presets.cfg
 # Ảnh chụp tạm khi chạy tests/capture.gd (Godot tự sinh cả .import cho chúng)
 _shot*.png
 _shot*.png.import
+# Video trailer render (nặng, tái tạo được bằng tools/trailer_*.gd)
+*.avi
 
 # Lưu ý: các file *.import và *.uid PHẢI được commit —
 # chúng giữ thiết lập import và ID tài nguyên, thiếu là project hỏng tham chiếu.

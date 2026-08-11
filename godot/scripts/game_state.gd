@@ -1,0 +1,318 @@
+extends Node
+## Persistent meta-progression that survives across dungeon runs and village
+## visits. This is the single source of truth for resources, the rescued roster,
+## the village grid layout, and the Global Warmth Index (GWI).
+
+signal resources_changed
+signal roster_changed
+signal gwi_changed(value: float)
+# The unbanked run satchel changed (loot picked up / banked / forfeited).
+signal satchel_changed
+# Meta-progression: total Ember XP and the derived Ember Level.
+# xp_changed(total, level, xp_into_level, xp_span_of_level); ember_level_up(new_level).
+signal xp_changed(total: int, level: int, into: int, span: int)
+signal ember_level_up(new_level: int)
+# The knowledge Codex gained an entry (QA D-06): a rescue or a first-built invention.
+signal codex_changed
+# The UI language changed ("en" | "vi") — the HUD relocalises visible text.
+signal lang_changed(lang: String)
+
+# Starter stock: just enough to hand-build the first Cabin (the onboarding
+# "lay the first stones yourself" moment). Everything after needs dungeon loot.
+var resources := {"wood": 6, "stone": 3, "iron": 0, "food": 0, "seeds": 3}
+
+# Loot gathered on the CURRENT descent but not yet banked. It only merges into
+# `resources` on a live return home; a death forfeits most of it. This is what
+# turns a run into a gamble instead of a shopping trip (QA F-01).
+var satchel: Dictionary = {"wood": 0, "stone": 0, "iron": 0}
+# Running tally of the current descent, read by the return/death summary (QA F-02):
+# {"rooms", "husks", "rescues": Array[String], "xp_start", "kindle", "blooms"}.
+# `kindle`/`blooms` track the run's EMBERGROWTH growth for the summary card (D-01).
+var run_stats: Dictionary = {}
+
+# Pillar ids of survivors brought home: "farmer", "smith", "builder", ...
+var rescued: Array[String] = []
+
+# Rescue buffs reframed as natural "attunements" — a single source of truth shared
+# by the Survivor, Main (re-apply on descent), and the HUD panel. Each maps a rescued
+# pillar to the stat buff kind, a display name, a one-line effect, and its element
+# (the seam the item-3 elemental progression will grow from).
+# Rebalanced toward parity (QA F-28): +50% damage strictly dominated the other two,
+# making rescue order a solved problem. All three are now comparable picks.
+const ATTUNEMENTS := {
+	"farmer":  {"buff": "armor",  "name": "Bramble Ward", "desc": "+2 Max HP",   "element": "Flora"},
+	"smith":   {"buff": "damage", "name": "Ember Fang",   "desc": "+25% Damage", "element": "Thermal"},
+	"builder": {"buff": "speed",  "name": "Gale Step",     "desc": "+25% Speed",  "element": "Wind"},
+}
+
+# --- Meta-progression: Ember XP → Ember Level (persists across runs) ---
+var xp: int = 0
+var ember_level: int = 0
+
+# Village grid: Vector2i(cell) -> {"type": String, "built": bool}
+var grid: Dictionary = {}
+
+var gwi: float = 0.0   # 0.0 (cold ash) .. 1.0 (full ember radiance)
+var run_count: int = 0
+var village_seeded: bool = false  # has the opening village layout been placed?
+# Half-extent (in cells, Chebyshev) of the tended CLEARING you may build on. The
+# world field is large; you spend resources to expand this outward over a run.
+var village_radius: int = 2
+var tutorial_seen: bool = false   # has the first-visit village onboarding run?
+var combat_tutorial_seen: bool = false  # has the first-descent combat intro run?
+
+# The branching map of the CURRENT run (a RunMap; untyped so this autoload never
+# depends on the class resolving first). Main generates it on descent.
+var run_map = null
+
+# One-time contextual tutorial tips already shown (key -> true), so each activity
+# is taught exactly once, the moment the player first meets it.
+var tips_seen: Dictionary = {}
+
+# Quest state per rescued pillar: "new" (not yet offered) → "active" → "done".
+var quests: Dictionary = {}
+
+# Recovered-knowledge Codex (QA D-06): ids from Lore.ENTRIES the player has unlocked.
+# The framing entry is known from the start; inventions unlock as they're recovered.
+var codex: Array[String] = ["ember"]
+
+# UI language: "en" (English) or "vi" (Tiếng Việt). Read by Loc.t everywhere text is
+# shown; toggled with L. Persisted to a tiny standalone settings file (independent of
+# the not-yet-built game save, F-07), so the choice survives a relaunch.
+var lang: String = "en"
+const SETTINGS_PATH := "user://settings.cfg"
+
+func _ready() -> void:
+	_setup_input()
+	_load_settings()
+
+# Register input actions in code so the project does not depend on the fragile
+# project.godot [input] serialisation format.
+func _setup_input() -> void:
+	_key_action("move_up", [KEY_W, KEY_UP])
+	_key_action("move_down", [KEY_S, KEY_DOWN])
+	_key_action("move_left", [KEY_A, KEY_LEFT])
+	_key_action("move_right", [KEY_D, KEY_RIGHT])
+	_key_action("interact", [KEY_E])
+	_key_action("build_menu", [KEY_B])
+	_key_action("cancel", [KEY_ESCAPE])
+	_key_action("dash", [KEY_SPACE])
+	_key_action("map", [KEY_TAB])
+	_key_action("character", [KEY_C])   # toggle the character / progression panel
+	_key_action("codex", [KEY_K])       # toggle the knowledge Codex ("the Ember's memories")
+	_key_action("lang", [KEY_L])        # cycle the UI language (English / Tiếng Việt)
+	# Combat is on the mouse: left swings, right guards.
+	_mouse_action("attack", MOUSE_BUTTON_LEFT)
+	_mouse_action("defend", MOUSE_BUTTON_RIGHT)
+
+func _key_action(action: String, keys: Array) -> void:
+	if InputMap.has_action(action):
+		return
+	InputMap.add_action(action)
+	for k in keys:
+		var ev := InputEventKey.new()
+		ev.physical_keycode = k
+		InputMap.action_add_event(action, ev)
+
+func _mouse_action(action: String, button: int) -> void:
+	if InputMap.has_action(action):
+		return
+	InputMap.add_action(action)
+	var mb := InputEventMouseButton.new()
+	mb.button_index = button
+	InputMap.action_add_event(action, mb)
+
+# --- Resources ---
+func add_resource(kind: String, amount: int) -> void:
+	resources[kind] = int(resources.get(kind, 0)) + amount
+	resources_changed.emit()
+
+func amount(kind: String) -> int:
+	return int(resources.get(kind, 0))
+
+func can_afford(costs: Dictionary) -> bool:
+	for k in costs:
+		if int(resources.get(k, 0)) < int(costs[k]):
+			return false
+	return true
+
+func spend(costs: Dictionary) -> bool:
+	if not can_afford(costs):
+		return false
+	for k in costs:
+		resources[k] = int(resources.get(k, 0)) - int(costs[k])
+	resources_changed.emit()
+	return true
+
+# --- Roster ---
+func add_rescued(pillar: String) -> void:
+	if pillar in rescued:
+		return
+	rescued.append(pillar)
+	roster_changed.emit()
+	# A rescued survivor carries their craft home — recover its knowledge (D-06/F-08).
+	unlock_codex(String(Lore.PILLAR_ENTRY.get(pillar, "")))
+
+func has_rescued(pillar: String) -> bool:
+	return pillar in rescued
+
+# --- Knowledge Codex (QA D-06) ---
+# Unlock a Codex entry; returns true only if it was newly recovered (so callers can
+# fire the one-time Ember line + fanfare). Empty/duplicate ids are no-ops.
+func unlock_codex(id: String) -> bool:
+	if id == "" or id in codex:
+		return false
+	codex.append(id)
+	codex_changed.emit()
+	return true
+
+func has_codex(id: String) -> bool:
+	return id in codex
+
+# How many BUILT buildings of a type stand in the village (drives the village→run
+# boons, QA D-02). Counts the seeded starter bed too — a crop bed is a crop bed.
+func building_count(build_type: String) -> int:
+	var n: int = 0
+	for key in grid.keys():
+		var d: Dictionary = grid[key]
+		if bool(d.get("built", false)) and String(d.get("type", "")) == build_type:
+			n += 1
+	return n
+
+# --- Run satchel (unbanked loot) + run summary ------------------------------
+
+# Start-of-descent reset: empty the satchel and open a fresh tally.
+func reset_run() -> void:
+	satchel = {"wood": 0, "stone": 0, "iron": 0}
+	run_stats = {"rooms": 0, "husks": 0, "rescues": [] as Array, "xp_start": xp,
+		"kindle": 0, "blooms": 0}
+	satchel_changed.emit()
+
+func satchel_add(kind: String, n: int) -> void:
+	satchel[kind] = int(satchel.get(kind, 0)) + n
+	satchel_changed.emit()
+
+func satchel_total() -> int:
+	var t: int = 0
+	for k in satchel:
+		t += int(satchel[k])
+	return t
+
+# A live return home: merge the satchel into the real stockpile. Returns what banked.
+func bank_satchel() -> Dictionary:
+	var banked: Dictionary = satchel.duplicate()
+	for k in satchel:
+		resources[k] = int(resources.get(k, 0)) + int(satchel[k])
+	satchel = {"wood": 0, "stone": 0, "iron": 0}
+	resources_changed.emit()
+	satchel_changed.emit()
+	return banked
+
+# Death: salvage a fraction of the satchel, lose the rest. Returns {"kept","lost"}.
+# Rounds on the satchel TOTAL, not per-material, then distributes the salvage — so a
+# small early-game satchel still yields *something* instead of flooring each kind to
+# zero (QA F-33). At least 1 is kept whenever anything was carried.
+func forfeit_satchel(keep_frac: float = 0.25) -> Dictionary:
+	var total: int = satchel_total()
+	var keep_total: int = int(round(float(total) * keep_frac))
+	if total > 0:
+		keep_total = maxi(1, keep_total)
+	var kept: Dictionary = {"wood": 0, "stone": 0, "iron": 0}
+	var lost: Dictionary = {"wood": 0, "stone": 0, "iron": 0}
+	var remaining: int = keep_total
+	for k in ["wood", "stone", "iron"]:
+		var have: int = int(satchel.get(k, 0))
+		var save: int = mini(have, remaining)
+		remaining -= save
+		kept[k] = save
+		lost[k] = have - save
+		resources[k] = int(resources.get(k, 0)) + save
+	satchel = {"wood": 0, "stone": 0, "iron": 0}
+	resources_changed.emit()
+	satchel_changed.emit()
+	return {"kept": kept, "lost": lost}
+
+# --- Ember XP / levels -------------------------------------------------------
+# Cumulative XP required to REACH a given level. Slowed ~2.7x from the first pass
+# (QA F-29: levels were falling every ~3 kills, so "LEVEL UP!" stopped meaning
+# anything and the per-level heal deleted attrition). Increments 32, 64, 96, …
+func _cum(level: int) -> int:
+	return 16 * level * (level + 1)
+
+func level_for_xp(total: int) -> int:
+	var l: int = 0
+	while _cum(l + 1) <= total:
+		l += 1
+	return l
+
+func xp_floor(level: int) -> int:   # total XP at which `level` began
+	return _cum(level)
+
+func xp_ceil(level: int) -> int:    # total XP needed for the next level
+	return _cum(level + 1)
+
+# Award Ember XP (husk kills). Rolls up any levels crossed, firing ember_level_up
+# once per level so every threshold gets its own celebration, then reports progress.
+func add_xp(n: int) -> void:
+	if n <= 0:
+		return
+	xp += n
+	var target: int = level_for_xp(xp)
+	while ember_level < target:
+		ember_level += 1
+		ember_level_up.emit(ember_level)
+	var into: int = xp - xp_floor(ember_level)
+	var span: int = xp_ceil(ember_level) - xp_floor(ember_level)
+	xp_changed.emit(xp, ember_level, into, span)
+
+# --- Global Warmth Index ---
+func add_gwi(delta: float) -> void:
+	set_gwi(gwi + delta)
+
+func set_gwi(v: float) -> void:
+	gwi = clampf(v, 0.0, 1.0)
+	gwi_changed.emit(gwi)
+
+# --- Soil (meta head-start for the run's succession, PROGRESSION §4.3 / D-01) ---
+# Accumulated "humus": a warm, populous village lets each descent begin further up
+# the ecological succession instead of from a persistent Ember Level (retired per
+# §8.0). Derived — session-only — from the two things that already persist across
+# runs: banked warmth (GWI) and settled survivors. Read by Player.begin_run to seed
+# the starting Bloom stage, so per-run power scales with the world you've rebuilt.
+func soil_value() -> float:
+	return clampf(gwi * 0.6 + float(rescued.size()) * 0.05, 0.0, 1.0)
+
+# The succession stage a descent starts at, given current Soil (0..2). A cold, empty
+# world starts at Ash (0); a warm, populated one begins as high as Herb (2).
+func soil_start_stage() -> int:
+	return mini(2, int(floor(soil_value() * 2.0)))
+
+# --- Language / settings (standalone persistence, independent of F-07) ---
+
+# Set the UI language ("en"|"vi"), announce it, and persist the choice. No-op if
+# unchanged. `toggle_lang` flips between the two for the L key.
+func set_lang(new_lang: String) -> void:
+	var l: String = "vi" if new_lang == "vi" else "en"
+	if l == lang:
+		return
+	lang = l
+	_save_settings()
+	lang_changed.emit(lang)
+
+func toggle_lang() -> void:
+	set_lang("en" if lang == "vi" else "vi")
+
+# Load persisted settings on boot. First run has no file: default the language to
+# Vietnamese when the OS locale is Vietnamese, else English.
+func _load_settings() -> void:
+	var cfg := ConfigFile.new()
+	if cfg.load(SETTINGS_PATH) == OK:
+		lang = "vi" if String(cfg.get_value("ui", "lang", "en")) == "vi" else "en"
+	else:
+		lang = "vi" if OS.get_locale().begins_with("vi") else "en"
+
+func _save_settings() -> void:
+	var cfg := ConfigFile.new()
+	cfg.load(SETTINGS_PATH)   # keep any other keys already stored
+	cfg.set_value("ui", "lang", lang)
+	cfg.save(SETTINGS_PATH)

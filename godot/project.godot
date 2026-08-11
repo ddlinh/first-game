@@ -1,21 +1,32 @@
-; CHIẾN TRANH KHUẨN LẠC — roguelite mô phỏng sinh thái 2.5D
-; Chỉnh trong editor thì Godot sẽ ghi đè file này, cứ thoải mái sửa.
+; Rekindled — post-apocalyptic roguelite vertical slice.
+; Engine configuration. Autoload order matters: Palette (consts) -> Assets
+; (bakes textures using Palette) -> GameState (registers input actions).
 
 config_version=5
 
 [application]
 
-config/name="Chiến tranh Khuẩn Lạc"
-config/description="Ba chủng vi khuẩn khắc chế vòng tròn trên đĩa thạch. Người chơi cấy quân và can thiệp, trận đánh tự diễn ra."
-run/main_scene="res://proto2/Agents.tscn"
-config/features=PackedStringArray("4.4", "Forward Plus")
+config/name="Rekindled"
+config/description="Post-apocalyptic roguelite: dungeon runs + village rebuilding. Vertical slice."
+run/main_scene="res://Main.tscn"
+config/features=PackedStringArray("4.7", "Forward Plus")
+config/icon="res://icon.svg"
+
+[autoload]
+
+Palette="*res://scripts/palette.gd"
+Assets="*res://scripts/assets.gd"
+GameState="*res://scripts/game_state.gd"
 
 [display]
 
 window/size/viewport_width=1280
 window/size/viewport_height=720
 window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
 
 [rendering]
 
-textures/canvas_textures/default_texture_filter=0
+textures/canvas_textures/default_texture_filter=1
+; The void beyond a room's edge. Rooms are islands; this is what surrounds them.
+environment/defaults/default_clear_color=Color(0.024, 0.02, 0.039, 1)
