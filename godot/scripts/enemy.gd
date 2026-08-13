@@ -417,10 +417,14 @@ func _draw_danger() -> void:
 	var prog: float = 1.0
 	if _phase == A_WINDUP:
 		prog = 1.0 - clampf(_phase_t / maxf(_windup, 0.001), 0.0, 1.0)
-	# Soft, low-opacity fill (no rim outline) so the zone reads as a subtle wash, not
-	# a hard-edged marker. Still fills in toward the strike so the timing stays legible.
-	var fill: float = 0.07 + 0.15 * prog
-	var red := Color(0.95, 0.14, 0.12)
+	# Soft, low-opacity fill so the zone reads as a subtle wash by default. High-contrast
+	# mode (CRITIQUE B6) roughly doubles the opacity and adds a rim outline for low-vision
+	# players; colorblind mode swaps the red for a high-luminance orange that stays
+	# distinct under red-green colour vision deficiency.
+	var base: float = 0.18 if GameState.high_contrast else 0.07
+	var span: float = 0.34 if GameState.high_contrast else 0.15
+	var fill: float = base + span * prog
+	var red := Color(1.0, 0.6, 0.0) if GameState.colorblind else Color(0.95, 0.14, 0.12)
 	if kind == "bomber":
 		_zone_circle(_bomb_radius(), red, fill)
 		return
@@ -440,11 +444,16 @@ func _draw_danger() -> void:
 		-perp * w0,
 	])
 	_danger.draw_colored_polygon(quad, Color(red.r, red.g, red.b, fill))
+	if GameState.high_contrast:
+		var outline := PackedVector2Array(quad)
+		outline.append(quad[0])
+		_danger.draw_polyline(outline, Color(red.r, red.g, red.b, minf(1.0, fill + 0.5)), 2.0)
 	# The Warden also previews the shockwave ring it slams down on landing.
 	if _shockwave:
 		_zone_circle(96.0, red, fill * 0.45)
 
-# A filled ground ellipse (a circle squashed onto the floor) — soft fill, no rim.
+# A filled ground ellipse (a circle squashed onto the floor). High-contrast mode adds a
+# bright rim so the zone reads clearly against the near-black dungeon floor (B6).
 func _zone_circle(radius: float, col: Color, fill: float) -> void:
 	var pts := PackedVector2Array()
 	var n: int = 30
@@ -452,6 +461,10 @@ func _zone_circle(radius: float, col: Color, fill: float) -> void:
 		var a: float = TAU * float(i) / float(n)
 		pts.append(Vector2(cos(a) * radius, sin(a) * radius * Palette.SQUASH))
 	_danger.draw_colored_polygon(pts, Color(col.r, col.g, col.b, fill))
+	if GameState.high_contrast:
+		var ring := PackedVector2Array(pts)
+		ring.append(pts[0])
+		_danger.draw_polyline(ring, Color(col.r, col.g, col.b, minf(1.0, fill + 0.5)), 2.0)
 
 # The danger wash only appears for the final stretch of the wind-up (and the strike),
 # so it flashes in just before the blow instead of lingering the whole telegraph. The

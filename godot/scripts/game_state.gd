@@ -96,6 +96,12 @@ var codex: Array[String] = ["ember"]
 # shown; toggled with L. Persisted to a tiny standalone settings file (independent of
 # the not-yet-built game save, F-07), so the choice survives a relaunch.
 var lang: String = "en"
+
+# --- Accessibility + audio settings (CRITIQUE B6), persisted with the language ---
+var volume: float = 0.85          # master audio level 0..1
+var muted: bool = false
+var high_contrast: bool = false   # bolder, outlined attack telegraphs (low-vision aid)
+var colorblind: bool = false      # swap red danger zones for a high-luminance orange
 const SETTINGS_PATH := "user://settings.cfg"
 
 func _ready() -> void:
@@ -330,14 +336,51 @@ func _load_settings() -> void:
 	var cfg := ConfigFile.new()
 	if cfg.load(SETTINGS_PATH) == OK:
 		lang = "vi" if String(cfg.get_value("ui", "lang", "en")) == "vi" else "en"
+		volume = clampf(float(cfg.get_value("ui", "volume", 0.85)), 0.0, 1.0)
+		muted = bool(cfg.get_value("ui", "muted", false))
+		high_contrast = bool(cfg.get_value("ui", "high_contrast", false))
+		colorblind = bool(cfg.get_value("ui", "colorblind", false))
 	else:
 		lang = "vi" if OS.get_locale().begins_with("vi") else "en"
+	apply_audio_settings()
 
 func _save_settings() -> void:
 	var cfg := ConfigFile.new()
 	cfg.load(SETTINGS_PATH)   # keep any other keys already stored
 	cfg.set_value("ui", "lang", lang)
+	cfg.set_value("ui", "volume", volume)
+	cfg.set_value("ui", "muted", muted)
+	cfg.set_value("ui", "high_contrast", high_contrast)
+	cfg.set_value("ui", "colorblind", colorblind)
 	cfg.save(SETTINGS_PATH)
+
+# Push the audio settings onto the Master bus (Sfx plays through it). Safe to call any
+# time — the Master bus always exists.
+func apply_audio_settings() -> void:
+	var bus := AudioServer.get_bus_index("Master")
+	if bus < 0:
+		bus = 0
+	AudioServer.set_bus_mute(bus, muted or volume <= 0.001)
+	AudioServer.set_bus_volume_db(bus, linear_to_db(clampf(volume, 0.0001, 1.0)))
+
+# Setters used by the settings screen: mutate, persist, apply.
+func set_volume(v: float) -> void:
+	volume = clampf(v, 0.0, 1.0)
+	apply_audio_settings()
+	_save_settings()
+
+func set_muted(m: bool) -> void:
+	muted = m
+	apply_audio_settings()
+	_save_settings()
+
+func set_high_contrast(on: bool) -> void:
+	high_contrast = on
+	_save_settings()
+
+func set_colorblind(on: bool) -> void:
+	colorblind = on
+	_save_settings()
 
 # --- Game save / load (CRITIQUE B2 / F-07) ----------------------------------
 # All meta-progression that should survive a quit. Run-scoped state (satchel,

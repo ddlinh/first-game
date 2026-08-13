@@ -179,6 +179,12 @@ const VI := {
 	"PAUSED": "TẠM DỪNG", "Resume": "Tiếp tục", "Save Game": "Lưu Game",
 	"Quit to Title": "Về Màn Hình Chính", "Game saved.": "Đã lưu game.",
 
+	# --- Settings screen (CRITIQUE B6) ---
+	"Settings": "Thiết Lập", "SETTINGS": "THIẾT LẬP", "Volume": "Âm lượng",
+	"Mute": "Tắt tiếng", "High-contrast telegraphs": "Báo đòn tương phản cao",
+	"Colorblind cues": "Màu cho người mù màu", "On": "Bật", "Off": "Tắt",
+	"Language": "Ngôn ngữ", "Back": "Quay lại",
+
 	# --- Named survivors (CRITIQUE A2) ---
 	"Free %s the %s  [E]": "Giải cứu %s — %s  [E]",
 	"%s the %s joins you": "%s — %s gia nhập cùng ngươi",

@@ -123,9 +123,10 @@ var _lvl_from: int = 0
 var _lvl_to: int = 0
 var _lvl_armed: bool = false
 
-# --- Title screen + pause menu (CRITIQUE B1) ---
+# --- Title screen + pause menu (CRITIQUE B1) + settings (B6) ---
 var _title_root: Control = null
 var _pause_root: Control = null
+var _settings_root: Control = null
 var _place_active: bool = false   # true while a build ghost follows the cursor (Esc = cancel, not pause)
 # --- Win screen (CRITIQUE B4/A1): the Ember's epilogue when the world rekindles ---
 var _victory_root: Control = null
@@ -1985,6 +1986,9 @@ func show_title() -> void:
 		var cb := _big_button("Continue")
 		cb.pressed.connect(_title_continue)
 		vb.add_child(cb)
+	var stb := _big_button("Settings")
+	stb.pressed.connect(show_settings)
+	vb.add_child(stb)
 	var qb := _big_button("Quit")
 	qb.pressed.connect(_quit_game)
 	vb.add_child(qb)
@@ -2044,9 +2048,102 @@ func toggle_pause() -> void:
 	var sb := _big_button("Save Game")
 	sb.pressed.connect(_pause_save)
 	vb.add_child(sb)
+	var setb := _big_button("Settings")
+	setb.pressed.connect(show_settings)
+	vb.add_child(setb)
 	var qb := _big_button("Quit to Title")
 	qb.pressed.connect(_pause_quit_title)
 	vb.add_child(qb)
+
+# --- Settings screen (CRITIQUE B6): audio + accessibility, opened over title/pause ---
+func show_settings() -> void:
+	if _settings_root != null and is_instance_valid(_settings_root):
+		return
+	# The tree is already paused by the title/pause menu beneath; this stacks on top.
+	_settings_root = Control.new()
+	_settings_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_settings_root.process_mode = Node.PROCESS_MODE_ALWAYS
+	_root.add_child(_settings_root)
+	var dim := ColorRect.new()
+	dim.color = Color(0.03, 0.02, 0.05, 0.92)
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	_settings_root.add_child(dim)
+	var cc := CenterContainer.new()
+	cc.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	cc.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_settings_root.add_child(cc)
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", _menu_style())
+	cc.add_child(panel)
+	var vb := VBoxContainer.new()
+	vb.add_theme_constant_override("separation", 12)
+	vb.custom_minimum_size = Vector2(440, 0)
+	vb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.add_child(vb)
+	var t := _make_label("SETTINGS", 28, Palette.GOLD_L)
+	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vb.add_child(t)
+	# Volume: a labelled slider.
+	var vrow := HBoxContainer.new()
+	vrow.add_theme_constant_override("separation", 12)
+	vrow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vb.add_child(vrow)
+	var vlab := _make_label("Volume", 18, Palette.UI_TEXT)
+	vlab.custom_minimum_size = Vector2(150, 0)
+	vrow.add_child(vlab)
+	var slider := HSlider.new()
+	slider.min_value = 0.0
+	slider.max_value = 1.0
+	slider.step = 0.05
+	slider.value = GameState.volume
+	slider.custom_minimum_size = Vector2(240, 26)
+	slider.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	slider.value_changed.connect(_on_volume_slider)
+	vrow.add_child(slider)
+	# Toggles — each rebuilds the screen so its On/Off label refreshes.
+	vb.add_child(_settings_toggle("Mute", GameState.muted, _toggle_mute))
+	vb.add_child(_settings_toggle("High-contrast telegraphs", GameState.high_contrast, _toggle_contrast))
+	vb.add_child(_settings_toggle("Colorblind cues", GameState.colorblind, _toggle_colorblind))
+	var langb := _big_button(Loc.t("Language") + ":  " + ("Tiếng Việt" if GameState.lang == "vi" else "English"))
+	langb.pressed.connect(_toggle_lang_setting)
+	vb.add_child(langb)
+	var back := _big_button("Back")
+	back.pressed.connect(_close_settings)
+	vb.add_child(back)
+
+func _settings_toggle(label: String, on: bool, handler: Callable) -> Button:
+	var b := _big_button("%s:  %s" % [Loc.t(label), Loc.t("On") if on else Loc.t("Off")])
+	b.pressed.connect(handler)
+	return b
+
+func _on_volume_slider(v: float) -> void:
+	GameState.set_volume(v)
+
+func _toggle_mute() -> void:
+	GameState.set_muted(not GameState.muted)
+	_rebuild_settings()
+
+func _toggle_contrast() -> void:
+	GameState.set_high_contrast(not GameState.high_contrast)
+	_rebuild_settings()
+
+func _toggle_colorblind() -> void:
+	GameState.set_colorblind(not GameState.colorblind)
+	_rebuild_settings()
+
+func _toggle_lang_setting() -> void:
+	GameState.toggle_lang()
+	_rebuild_settings()
+
+func _rebuild_settings() -> void:
+	_close_settings()
+	show_settings()
+
+func _close_settings() -> void:
+	if _settings_root != null and is_instance_valid(_settings_root):
+		_settings_root.queue_free()
+		_settings_root = null
 
 func _close_pause() -> void:
 	get_tree().paused = false
@@ -2313,6 +2410,10 @@ func _input(event: InputEvent) -> void:
 		if _menu_open:
 			close_build_menu()
 			build_cancelled.emit()
+			get_viewport().set_input_as_handled()
+			return
+		if _settings_root != null and is_instance_valid(_settings_root):
+			_close_settings()
 			get_viewport().set_input_as_handled()
 			return
 		if _pause_root != null and is_instance_valid(_pause_root):

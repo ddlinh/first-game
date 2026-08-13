@@ -161,7 +161,25 @@ func _process(_delta: float) -> void:
 			_hud().call("toggle_pause")          # pause menu (CRITIQUE B1)
 		472:
 			await _shot("20_pause")
-		480:
+		478:
+			_hud().call("show_settings")         # settings over the pause menu (CRITIQUE B6)
+		486:
+			await _shot("21_settings")
+		492:
+			_hud().call("_close_settings")
+			_hud().call("_close_pause")
+			# High-contrast + colorblind telegraphs (CRITIQUE B6): bolder, outlined,
+			# orange danger zones. Drop into a fresh fight to show them off.
+			GameState.high_contrast = true
+			GameState.colorblind = true
+			main.call("start_dungeon")
+		516:
+			_walk_into_the_room()   # close on the husks so they can wind up in range
+		540:
+			_telegraph_husks()
+		556:
+			await _shot("22_telegraph_hc")   # bolder, outlined, orange danger zones
+		562:
 			get_tree().quit()
 
 # --- Scene poking -----------------------------------------------------------
