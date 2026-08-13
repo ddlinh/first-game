@@ -79,7 +79,15 @@ func can_interact(by: Node) -> bool:
 	return not _freed
 
 func interact_prompt() -> String:
-	return Loc.t("Free %s  [E]") % Loc.t(pillar)
+	# Name the person, not just the role (CRITIQUE A2): "Free Rowan the farmer  [E]".
+	return Loc.t("Free %s the %s  [E]") % [GameState.survivor_name(pillar), Loc.t(pillar)]
+
+# A line of character each survivor speaks the moment they're freed (CRITIQUE A2).
+const LINES := {
+	"farmer":  "I know soil and season — give me ground, and I'll feed us all.",
+	"smith":   "Iron sings if you know the heat. And I know the heat.",
+	"builder": "Show me a ruin, and I'll show you where the walls belong.",
+}
 
 func do_interact(by: Node) -> void:
 	free_it(by)
@@ -120,7 +128,10 @@ func free_it(by: Node) -> void:
 		var buff: String = _buff_for_pillar(pillar)
 		if buff != "" and by.has_method("apply_buff"):
 			by.call("apply_buff", buff, true)   # true → raise the "attunement gained" banner
-			Main.banner(Loc.t("Attunement: %s") % Loc.t(_attune_name(pillar)), Loc.t(_attune_desc(pillar)), Palette.MOSS_L)
+			# Name the person and let them speak — the rescue is a character beat now (A2).
+			Main.banner(Loc.t("%s the %s joins you") % [GameState.survivor_name(pillar), Loc.t(pillar)],
+				Loc.t("Attunement: %s") % Loc.t(_attune_name(pillar)), Palette.MOSS_L)
+			Main.tip("met_%s" % pillar, "%s: “%s”" % [GameState.survivor_name(pillar), Loc.t(String(LINES.get(pillar, "")))])
 		if GameState.run_stats.has("rescues"):
 			(GameState.run_stats["rescues"] as Array).append(pillar)
 	else:

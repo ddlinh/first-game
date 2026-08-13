@@ -14,6 +14,8 @@ signal xp_changed(total: int, level: int, into: int, span: int)
 signal ember_level_up(new_level: int)
 # The knowledge Codex gained an entry (QA D-06): a rescue or a first-built invention.
 signal codex_changed
+# The world has fully rekindled (GWI hit 1.0) — the win state (CRITIQUE B4/A1).
+signal game_won
 # The UI language changed ("en" | "vi") — the HUD relocalises visible text.
 signal lang_changed(lang: String)
 
@@ -45,6 +47,13 @@ const ATTUNEMENTS := {
 	"builder": {"buff": "speed",  "name": "Gale Step",     "desc": "+25% Speed",  "element": "Wind"},
 }
 
+# Survivors are people, not role-nouns (CRITIQUE A2): a given name each, shared by the
+# rescue moment and the villager they become. Proper nouns, so they stay untranslated.
+const SURVIVOR_NAMES := {"farmer": "Rowan", "smith": "Bex", "builder": "Malin"}
+
+func survivor_name(p: String) -> String:
+	return String(SURVIVOR_NAMES.get(p, p.capitalize()))
+
 # --- Meta-progression: Ember XP → Ember Level (persists across runs) ---
 var xp: int = 0
 var ember_level: int = 0
@@ -53,6 +62,7 @@ var ember_level: int = 0
 var grid: Dictionary = {}
 
 var gwi: float = 0.0   # 0.0 (cold ash) .. 1.0 (full ember radiance)
+var won: bool = false  # has the world fully rekindled? (win fires once, CRITIQUE B4)
 var run_count: int = 0
 var village_seeded: bool = false  # has the opening village layout been placed?
 # Half-extent (in cells, Chebyshev) of the tended CLEARING you may build on. The
@@ -71,6 +81,12 @@ var tips_seen: Dictionary = {}
 
 # Quest state per rescued pillar: "new" (not yet offered) → "active" → "done".
 var quests: Dictionary = {}
+
+# The farm is gated on the FARMER (VISION: knowledge is carried by people). Rescuing
+# the Farmer lays out fallow ground from his knowledge; the hero then supplies the
+# materials he lacks to break it. "none" (no Farmer yet) → "fallow" (laid out, awaiting
+# 6 wood + 4 seeds) → "active" (worked, producing food + Provisions).
+var farm_state: String = "none"
 
 # Recovered-knowledge Codex (QA D-06): ids from Lore.ENTRIES the player has unlocked.
 # The framing entry is known from the start; inventions unlock as they're recovered.
@@ -272,6 +288,12 @@ func add_gwi(delta: float) -> void:
 func set_gwi(v: float) -> void:
 	gwi = clampf(v, 0.0, 1.0)
 	gwi_changed.emit(gwi)
+	# The VISION's payoff (CRITIQUE B4/A1): full warmth means the world has rekindled.
+	# Fire the win exactly once — reaching 1.0 used to change a shader uniform and
+	# nothing else; now it ends the arc with the Ember's epilogue.
+	if gwi >= 1.0 and not won:
+		won = true
+		game_won.emit()
 
 # --- Soil (meta head-start for the run's succession, PROGRESSION §4.3 / D-01) ---
 # Accumulated "humus": a warm, populous village lets each descent begin further up
@@ -316,3 +338,96 @@ func _save_settings() -> void:
 	cfg.load(SETTINGS_PATH)   # keep any other keys already stored
 	cfg.set_value("ui", "lang", lang)
 	cfg.save(SETTINGS_PATH)
+
+# --- Game save / load (CRITIQUE B2 / F-07) ----------------------------------
+# All meta-progression that should survive a quit. Run-scoped state (satchel,
+# run_stats, run_map) is deliberately excluded — those only live during a descent.
+# We serialise with var_to_str, which round-trips Vector2i grid keys and nested
+# dictionaries safely, so the whole snapshot is one human-readable file.
+const SAVE_PATH := "user://save.dat"
+
+func has_save() -> bool:
+	return FileAccess.file_exists(SAVE_PATH)
+
+func save_game() -> void:
+	var data := {
+		"resources": resources, "rescued": rescued, "grid": grid,
+		"gwi": gwi, "won": won, "run_count": run_count,
+		"village_seeded": village_seeded, "village_radius": village_radius,
+		"tutorial_seen": tutorial_seen, "combat_tutorial_seen": combat_tutorial_seen,
+		"quests": quests, "codex": codex, "farm_state": farm_state,
+		"tips_seen": tips_seen,
+	}
+	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
+	if f != null:
+		f.store_string(var_to_str(data))
+		f.close()
+
+func load_game() -> bool:
+	if not FileAccess.file_exists(SAVE_PATH):
+		return false
+	var f := FileAccess.open(SAVE_PATH, FileAccess.READ)
+	if f == null:
+		return false
+	var txt := f.get_as_text()
+	f.close()
+	var data: Variant = str_to_var(txt)
+	if not (data is Dictionary):
+		return false
+	var d: Dictionary = data
+	resources = d.get("resources", resources)
+	rescued = _as_str_array(d.get("rescued", []))
+	grid = d.get("grid", {})
+	gwi = float(d.get("gwi", 0.0))
+	won = bool(d.get("won", false))
+	run_count = int(d.get("run_count", 0))
+	village_seeded = bool(d.get("village_seeded", false))
+	village_radius = maxi(2, int(d.get("village_radius", 2)))
+	tutorial_seen = bool(d.get("tutorial_seen", false))
+	combat_tutorial_seen = bool(d.get("combat_tutorial_seen", false))
+	quests = d.get("quests", {})
+	codex = _as_str_array(d.get("codex", ["ember"]))
+	farm_state = String(d.get("farm_state", "none"))
+	tips_seen = d.get("tips_seen", {})
+	# Re-announce loaded state so the HUD repaints (safe if listeners aren't wired yet).
+	resources_changed.emit()
+	roster_changed.emit()
+	gwi_changed.emit(gwi)
+	return true
+
+func clear_save() -> void:
+	if FileAccess.file_exists(SAVE_PATH):
+		DirAccess.remove_absolute(SAVE_PATH)
+
+# Coerce a loaded untyped Array into the Array[String] fields expect.
+func _as_str_array(a: Variant) -> Array[String]:
+	var out: Array[String] = []
+	if a is Array:
+		for x in a:
+			out.append(String(x))
+	return out
+
+# Wipe all meta-progression back to a fresh start (New Game).
+func reset_all() -> void:
+	resources = {"wood": 6, "stone": 3, "iron": 0, "food": 0, "seeds": 3}
+	satchel = {"wood": 0, "stone": 0, "iron": 0}
+	run_stats = {}
+	rescued = [] as Array[String]
+	grid = {}
+	gwi = 0.0
+	won = false
+	run_count = 0
+	village_seeded = false
+	village_radius = 2
+	tutorial_seen = false
+	combat_tutorial_seen = false
+	quests = {}
+	codex = ["ember"] as Array[String]
+	farm_state = "none"
+	tips_seen = {}
+	xp = 0
+	ember_level = 0
+	run_map = null
+	resources_changed.emit()
+	roster_changed.emit()
+	gwi_changed.emit(gwi)

@@ -17,13 +17,24 @@ const FIELD := 9
 const CENTER := Vector2i.ZERO
 const START_RADIUS := 2
 
-# The module owns the buildable catalogue: cost, finished texture, and the GWI
-# warmth each completed building radiates.
+# The module owns the buildable catalogue: cost, finished texture, the GWI warmth
+# each completed building radiates, and a one-line effect blurb. The blurb + warmth
+# are surfaced on the build-menu card (like a city-builder's building tooltip) so the
+# player picks by what a structure DOES, not just what it costs (QA UX: build menu).
 const BUILDINGS := {
-	"cabin": {"label": "Cabin", "cost": {"wood": 5, "stone": 2}, "tex": "building_cabin", "gwi": 0.18},
-	"forge": {"label": "Forge", "cost": {"stone": 4, "iron": 2}, "tex": "building_forge", "gwi": 0.15},
-	"crop_bed": {"label": "Crop Bed", "cost": {"wood": 3}, "tex": "building_crop_bed", "gwi": 0.05},
+	"cabin": {"label": "Cabin", "cost": {"wood": 5, "stone": 2}, "tex": "building_cabin", "gwi": 0.18,
+		"desc": "Shelter for a survivor. Toughens you (+Max HP) on your next descent."},
+	"forge": {"label": "Forge", "cost": {"stone": 4, "iron": 2}, "tex": "building_forge", "gwi": 0.15,
+		"desc": "Work iron into blades. Sharpens your strikes (+Damage) below."},
+	"crop_bed": {"label": "Crop Bed", "cost": {"wood": 3}, "tex": "building_crop_bed", "gwi": 0.05,
+		"desc": "Tilled soil to grow food — seeds become Provisions that heal mid-run."},
 }
+
+# The farm the Farmer establishes (VILLAGE_DESIGN P1). It is NOT a free build: rescuing
+# the Farmer lays out this fallow cell from his knowledge, and the hero must supply the
+# materials he lacks to break it into a working farm.
+const FARM_CELL := Vector2i(2, 1)
+const FARM_SETUP := {"wood": 6, "seeds": 4}   # what the Farmer needs to break the fallow ground
 
 # One quest per rescued pillar. `res` is the resource threshold to reach; on turn-in
 # the pillar rewards warmth (GWI) plus materials. Keeps the village loop purposeful.
@@ -40,6 +51,19 @@ const QUESTS := {
 		"reward": {"wood": 5}, "gwi": 0.15,
 		"ask": "A village needs walls. Raise 3 buildings and I'll frame the rest.",
 		"thanks": "Three roofs stand. This is a home again."},
+}
+
+# Once a survivor's one-off quest is done, they keep working: a REPEATABLE commission
+# that trades a stack of materials for warmth + a little something back. This gives the
+# village a standing purpose (and warmth a sink) instead of going inert after three
+# quests — the ongoing-jobs loop farming/settlement builders lean on (fixes QA F-14).
+const COMMISSIONS := {
+	"farmer":  {"res": "food", "need": 4, "reward": {"seeds": 2}, "gwi": 0.04,
+		"ask": "Keep the larder full — 4 food sees us through the cold."},
+	"smith":   {"res": "iron", "need": 3, "reward": {"stone": 3}, "gwi": 0.04,
+		"ask": "The forge is always hungry — 3 iron keeps it roaring."},
+	"builder": {"res": "wood", "need": 4, "reward": {"stone": 2}, "gwi": 0.04,
+		"ask": "There's always a roof to mend — 4 wood for the repairs."},
 }
 
 # Injected by Main before this node enters the tree (a Hud). Left untyped on
@@ -107,6 +131,7 @@ func _ready() -> void:
 	_seed_and_rebuild()
 	_spawn_supply_gate()
 	_spawn_rescued_villagers()
+	_setup_farm()
 	# Warmth now drives the one shared grade (Main) plus visible world objects —
 	# the second full-screen overlay is gone (QA F-18/F-23).
 	_apply_warmth(GameState.gwi)
@@ -322,16 +347,11 @@ func camera_bounds() -> Rect2:
 func _on_gwi_changed(value: float) -> void:
 	_apply_warmth(value)
 
-# First visit seeds one pre-built Crop Bed so farming is reachable turn one;
-# then (every visit) reconstruct every structure the grid records.
+# Reconstruct every structure the grid records. Farming is no longer a turn-one
+# freebie — it comes from rescuing the Farmer (see _setup_farm), so the rescue finally
+# matters and the "knowledge is carried by people" VISION lands (VILLAGE_DESIGN P1).
 func _seed_and_rebuild() -> void:
-	if not GameState.village_seeded:
-		var seed_cell := Vector2i(2, 1)
-		# Flag the freebie so the Builder's "raise 3 buildings" quest doesn't count
-		# it — otherwise the goal is really only 2 player builds (QA F-17).
-		GameState.grid[seed_cell] = {"type": "crop_bed", "built": true, "seeded": true}
-		GameState.village_seeded = true
-
+	GameState.village_seeded = true
 	for key in GameState.grid.keys():
 		var cell: Vector2i = key
 		var data: Dictionary = GameState.grid[cell]
@@ -353,6 +373,50 @@ func _spawn_rescued_villagers() -> void:
 		v.setup(pillar, self, Vector2(-96.0 + float(i) * 72.0, -24.0))
 		add_child(v)
 
+# --- The Farmer → Farm chain (VILLAGE_DESIGN P1) ----------------------------
+# Rescuing the Farmer carries the KNOWLEDGE of agriculture home; from it he lays out
+# fallow ground, but lacks materials to work it — so the hero gets a supply quest.
+# Idempotent, so it rebuilds the correct farm object on every village visit.
+func _setup_farm() -> void:
+	if not GameState.has_rescued("farmer"):
+		return   # no Farmer yet → no farm; the rescue is what unlocks farming
+	# First time the Farmer is home: he tills a plot from memory (fallow, inert).
+	if GameState.farm_state == "none":
+		GameState.farm_state = "fallow"
+		Main.tip("farm_fallow", "The Farmer remembers this craft — he's tilled a plot from memory, but lacks the materials to work it. Bring him what he needs.")
+	if GameState.farm_state == "fallow":
+		_spawn_fallow_plot(FARM_CELL)
+	elif GameState.farm_state == "active":
+		# _seed_and_rebuild raises the plot from the grid; only self-heal if it's missing.
+		if not GameState.grid.has(FARM_CELL):
+			GameState.grid[FARM_CELL] = {"type": "crop_bed", "built": true, "seeded": true}
+			_add_building_sprite(FARM_CELL, "crop_bed")
+			_spawn_crop_plot(FARM_CELL)
+	_update_objective()
+
+func _spawn_fallow_plot(cell: Vector2i) -> void:
+	var fp := FallowPlot.new()
+	fp.village = self
+	fp.cell = cell
+	fp.position = cell_to_world(cell)
+	add_child(fp)
+
+# The hero delivered what the Farmer lacked: break the fallow ground into a working
+# farm — record it, raise the plot, warm the village, and confirm the knowledge.
+func _activate_farm(cell: Vector2i) -> void:
+	GameState.farm_state = "active"
+	GameState.grid[cell] = {"type": "crop_bed", "built": true, "seeded": true}
+	_add_building_sprite(cell, "crop_bed")
+	_spawn_crop_plot(cell)
+	GameState.add_gwi(0.08)
+	Vfx.embers(self, cell_to_world(cell), 26, Palette.MOSS_L)
+	if hud:
+		hud.toast(Loc.t("The Farmer breaks the fallow ground — the farm lives!"), Palette.GOLD)
+	var line: String = String(Lore.EMBER_LINE.get("agriculture", ""))
+	if line != "":
+		Main.tip("codex_agriculture", line)
+	_update_objective()
+
 # How many buildings the player has actually raised (for the builder's quest).
 func built_count() -> int:
 	var n := 0
@@ -367,10 +431,14 @@ func built_count() -> int:
 func _update_objective() -> void:
 	if hud == null or not hud.has_method("set_objective"):
 		return
-	if built_count() < 1:
+	# The Farmer's supply quest takes priority once he's laid the fallow ground.
+	if GameState.farm_state == "fallow":
+		hud.call("set_objective", "Bring the Farmer %d wood & %d seeds — break the fallow ground (press E on it)"
+			% [int(FARM_SETUP["wood"]), int(FARM_SETUP["seeds"])])
+	elif built_count() < 1:
 		hud.call("set_objective", "Raise a building — press B, place a Cabin, then hammer it up (E)")
-	elif not _any_crop_growing() and GameState.amount("seeds") > 0:
-		hud.call("set_objective", "Plant a seed on the Crop Bed — stand on it and press E")
+	elif GameState.farm_state == "active" and not _any_crop_growing() and GameState.amount("seeds") > 0:
+		hud.call("set_objective", "Plant a seed on the farm — stand on it and press E")
 	else:
 		hud.call("set_objective", "Warm the village, then Descend at the Supply Gate")
 
@@ -397,20 +465,27 @@ func _spawn_supply_gate() -> void:
 	add_child(g)
 	_supply_gate = g
 
-# What the guidance beacon points at: a frame waiting to be hammered, then a ripe
-# crop to harvest, otherwise the Supply Gate (the way down).
+# What the guidance beacon points at: fallow ground waiting on the Farmer's supplies,
+# then a frame to hammer, then a ripe crop to harvest, otherwise the Supply Gate.
 func guidance_target() -> Node2D:
+	var fallow: Node2D = null
 	var scaffold: Node2D = null
 	var ripe: Node2D = null
 	for c in get_children():
-		if c is Scaffold:
+		if c is FallowPlot:
+			fallow = c
+		elif c is Scaffold:
 			scaffold = c
 		elif c is CropPlot and (c as CropPlot).stage == 3:
 			ripe = c
+	if fallow != null and GameState.can_afford(FARM_SETUP):
+		return fallow
 	if scaffold != null:
 		return scaffold
 	if ripe != null:
 		return ripe
+	if fallow != null:
+		return fallow
 	return _supply_gate
 
 # Drop a finished building's sprite onto a cell (no side effects — used by both
@@ -540,6 +615,10 @@ func _open_build_menu() -> void:
 	var entries: Array = []
 	for key in BUILDINGS.keys():
 		var id: String = key
+		# Crop Beds require the Farmer's knowledge — you can only expand the farm once
+		# he's established it (VILLAGE_DESIGN P1). Before that, farming isn't buildable.
+		if id == "crop_bed" and GameState.farm_state != "active":
+			continue
 		var info: Dictionary = BUILDINGS[id]
 		var cost: Dictionary = info["cost"]
 		entries.append({
@@ -547,6 +626,9 @@ func _open_build_menu() -> void:
 			"label": String(info["label"]),
 			"cost": cost,
 			"affordable": GameState.can_afford(cost),
+			"tex": String(info.get("tex", "")),
+			"desc": String(info.get("desc", "")),
+			"warm": float(info.get("gwi", 0.0)),
 		})
 	# The expansion option: no placement, it just tends more of the field.
 	if GameState.village_radius < FIELD - 1:
@@ -556,6 +638,9 @@ func _open_build_menu() -> void:
 			"label": "Expand Clearing",
 			"cost": ecost,
 			"affordable": GameState.can_afford(ecost),
+			"tex": "tile_grass",
+			"desc": "Tend one more ring of wild land so you can build farther out.",
+			"warm": 0.0,
 		})
 	hud.open_build_menu(entries)
 
@@ -611,6 +696,10 @@ func _enter_placement(id: String) -> void:
 	_ghost.scale = Vector2(Palette.PX, Palette.PX)
 	_ghost.modulate = Color(1.0, 1.0, 1.0, 0.55)
 	_ghost.visible = true
+	# A persistent placement banner (like a city-builder's "placing X" prompt) so the
+	# player always knows what they're dropping and how to confirm/cancel.
+	if hud and hud.has_method("show_place_banner"):
+		hud.call("show_place_banner", String(info["label"]), info["cost"])
 	# Raise the buildable-cell grid guide for the duration of placement.
 	if _place_guide == null or not is_instance_valid(_place_guide):
 		_place_guide = PlaceGuide.new()
@@ -624,6 +713,8 @@ func _exit_placement() -> void:
 	_place_id = ""
 	if _ghost:
 		_ghost.visible = false
+	if hud and hud.has_method("hide_place_banner"):
+		hud.call("hide_place_banner")
 	if _place_guide != null and is_instance_valid(_place_guide):
 		_place_guide.queue_free()
 		_place_guide = null
@@ -683,6 +774,30 @@ class PlaceGuide extends Node2D:
 		var hr := Rect2(hc - half, Vector2(C, C))
 		draw_rect(hr, Color(col.r, col.g, col.b, 0.14), true)
 		draw_rect(hr, col, false, 2.5)
+
+# A small bobbing amber "!" bubble raised over a ripe crop plot — the farming-sim
+# harvest cue, so the player spots ready plots across the field without walking to each.
+class RipeCue extends Node2D:
+	var _t: float = 0.0
+
+	func _ready() -> void:
+		z_index = 40   # floats above the crop sprite and soil
+		position = Vector2(0.0, -30.0)
+
+	func _process(delta: float) -> void:
+		_t += delta
+		position.y = -30.0 - absf(sin(_t * 3.0)) * 4.0   # gentle up-and-down bob
+		queue_redraw()
+
+	func _draw() -> void:
+		var pulse: float = 0.5 + 0.5 * sin(_t * 3.0)
+		# soft halo + solid pip so it reads on bright grass and dim soil alike
+		draw_circle(Vector2.ZERO, 9.0,
+			Color(Palette.GOLD.r, Palette.GOLD.g, Palette.GOLD.b, 0.28 + 0.24 * pulse))
+		draw_circle(Vector2.ZERO, 6.5, Palette.GOLD_L)
+		# an exclamation mark inside, in dark soil so it stays legible
+		draw_rect(Rect2(Vector2(-1.2, -4.2), Vector2(2.4, 5.2)), Palette.SOIL_D)
+		draw_circle(Vector2(0.0, 3.4), 1.4, Palette.SOIL_D)
 
 # A blueprint frame the player hammers up (or a rescued Builder auto-raises).
 class Scaffold extends Node2D:
@@ -765,6 +880,61 @@ class Scaffold extends Node2D:
 			village.finish_building(cell, build_id)
 		queue_free()
 
+# Fallow ground the Farmer laid out from memory but cannot yet work (VILLAGE_DESIGN P1,
+# stage "fallow"). Interact to break it into a real farm once you carry the materials
+# he lacks. It is the physical form of the Farmer's supply quest.
+class FallowPlot extends Node2D:
+	var village: Village = null
+	var cell: Vector2i = Vector2i.ZERO
+
+	func _ready() -> void:
+		z_index = 1
+		add_to_group("interactable")
+
+	# Tilled-but-untended soil with faint furrow marks — "prepared, but nothing sown."
+	func _draw() -> void:
+		var rx: float = float(Palette.CELL) * 0.42
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2(1.0, Palette.SQUASH))
+		draw_circle(Vector2.ZERO, rx, Palette.SOIL_D)
+		draw_circle(Vector2(0.0, -1.5), rx * 0.85, Palette.SOIL)
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		for i in range(-1, 2):
+			draw_line(Vector2(float(i) * 10.0, -8.0), Vector2(float(i) * 10.0, 8.0),
+				Palette.SOIL_D, 1.0)
+
+	func _process(_delta: float) -> void:
+		var pl: Node2D = get_tree().get_first_node_in_group("player") as Node2D
+		if pl != null and global_position.distance_to(pl.global_position) < 84.0:
+			Main.tip("farm_break", "Fallow ground the Farmer tilled. Gather %d wood and %d seeds from the ruins, then press E here to break it into a farm."
+				% [int(Village.FARM_SETUP["wood"]), int(Village.FARM_SETUP["seeds"])])
+
+	func interact_radius() -> float:
+		return 40.0
+
+	func can_interact(_by: Node) -> bool:
+		return true
+
+	func interact_prompt() -> String:
+		var nw: int = int(Village.FARM_SETUP["wood"])
+		var ns: int = int(Village.FARM_SETUP["seeds"])
+		if GameState.can_afford(Village.FARM_SETUP):
+			return Loc.t("Break the fallow ground  (%d wood, %d seeds)  [E]") % [nw, ns]
+		return Loc.t("Fallow ground — needs %d wood, %d seeds  (you have %d, %d)") \
+			% [nw, ns, GameState.amount("wood"), GameState.amount("seeds")]
+
+	func do_interact(_by: Node) -> void:
+		if not GameState.can_afford(Village.FARM_SETUP):
+			if village != null and village.hud != null and village.hud.has_method("toast"):
+				village.hud.call("toast", Loc.t("The Farmer needs %d wood and %d seeds first.")
+					% [int(Village.FARM_SETUP["wood"]), int(Village.FARM_SETUP["seeds"])], Palette.BLOOD)
+			return
+		GameState.spend(Village.FARM_SETUP)
+		var v: Village = village
+		var c: Vector2i = cell
+		queue_free()
+		if v != null and is_instance_valid(v):
+			v._activate_farm(c)
+
 # A soil plot atop a finished Crop Bed: plant a seed, wait through 4 stages, harvest.
 class CropPlot extends Node2D:
 	const STAGE_TIME := 4.0
@@ -772,6 +942,8 @@ class CropPlot extends Node2D:
 	var t: float = 0.0
 	var village: Village = null   # to refresh the objective chain on plant/harvest
 	var _sprite: Sprite2D = null
+	var _cue: RipeCue = null       # bobbing "ready to harvest" marker (Stardew-style)
+	var _auto_t: float = 0.0       # cadence for the Farmer working the plot on his own
 
 	func _ready() -> void:
 		# The growth sprite rides on top of always-visible tilled soil (see _draw),
@@ -820,15 +992,20 @@ class CropPlot extends Node2D:
 				t = 0.0
 				_refresh_sprite()
 		elif stage == 3:
-			GameState.add_resource("food", 2)
-			GameState.add_resource("seeds", 1)  # one seed back to keep the loop going
-			Vfx.embers(get_parent(), global_position, 12, Palette.GOLD)
-			Vfx.float_text(get_parent(), global_position, "+2 food", Palette.AMBER)
-			stage = -1
-			t = 0.0
-			_refresh_sprite()
+			_harvest()
 		if village != null and is_instance_valid(village):
 			village._update_objective()
+
+	# Reap a ripe plot: +2 food, +1 seed back (loop-sustaining), reset to empty soil.
+	# Shared by the player's manual harvest and the Farmer's auto-tend.
+	func _harvest() -> void:
+		GameState.add_resource("food", 2)
+		GameState.add_resource("seeds", 1)
+		Vfx.embers(get_parent(), global_position, 12, Palette.GOLD)
+		Vfx.float_text(get_parent(), global_position, "+2 food", Palette.AMBER)
+		stage = -1
+		t = 0.0
+		_refresh_sprite()
 
 	func _process(delta: float) -> void:
 		if stage >= 0 and stage < 3:
@@ -837,13 +1014,30 @@ class CropPlot extends Node2D:
 				t = 0.0
 				stage = mini(stage + 1, 3)
 				_refresh_sprite()
+		# The Farmer works the farm on his own (VILLAGE_DESIGN P1 / V1): once he's home
+		# and the farm is active, empty soil re-sows itself from the seed stock and ripe
+		# crops are collected over time — so the farm produces food even while you're in
+		# the ruins. Seed-gated, so it stalls if you run the seed stock dry.
+		if GameState.has_rescued("farmer") and GameState.farm_state == "active":
+			_auto_t += delta
+			if stage == -1 and GameState.amount("seeds") > 0 and _auto_t >= 2.5:
+				GameState.spend({"seeds": 1})
+				stage = 0
+				t = 0.0
+				_auto_t = 0.0
+				_refresh_sprite()
+			elif stage == 3 and _auto_t >= 3.5:
+				_auto_t = 0.0
+				_harvest()
+				if village != null and is_instance_valid(village):
+					village._update_objective()
 		# Teach planting/harvesting the first time the hero stands over a plot.
 		var pl: Node2D = get_tree().get_first_node_in_group("player") as Node2D
 		if pl != null and global_position.distance_to(pl.global_position) < 72.0:
 			if stage == -1 and GameState.amount("seeds") > 0:
-				Main.tip("plant", "Empty soil. Press E to plant a seed, then come back when it's ripe.")
+				Main.tip("plant", "Empty soil. Press E to plant a seed, or let the Farmer sow it — either way it grows.")
 			elif stage == 3:
-				Main.tip("harvest", "Ripe! Press E to harvest — food to live on, and a seed to replant.")
+				Main.tip("harvest", "Ripe! Press E to harvest now, or the Farmer will collect it shortly.")
 
 	func _refresh_sprite() -> void:
 		if _sprite == null:
@@ -853,6 +1047,18 @@ class CropPlot extends Node2D:
 		else:
 			_sprite.visible = true
 			_sprite.texture = Assets.tex("crop_%d" % stage)
+		_refresh_cue()
+
+	# Raise a bobbing amber marker over a RIPE plot so harvest-ready crops read across
+	# the whole field at a glance (the farming-sim "come collect me" cue), and clear it
+	# the instant the plot is harvested or replanted.
+	func _refresh_cue() -> void:
+		if stage == 3 and _cue == null:
+			_cue = RipeCue.new()
+			add_child(_cue)
+		elif stage != 3 and _cue != null:
+			_cue.queue_free()
+			_cue = null
 
 # The run-start point: interact to descend into the ruins.
 class SupplyGate extends Node2D:
@@ -977,7 +1183,15 @@ class Villager extends Node2D:
 					return Loc.t("Turn in “%s”  [E]") % Loc.t(String(q["title"]))
 				return "%s   (%d/%d)  [E]" % [Loc.t(String(q["title"])), prog, need]
 			"done":
-				return Loc.t("Thank the %s  [E]") % Loc.t(pillar)
+				# Story quest finished → the villager keeps a standing commission open.
+				var cm: Dictionary = Village.COMMISSIONS.get(pillar, {})
+				if cm.is_empty():
+					return Loc.t("Thank the %s  [E]") % Loc.t(pillar)
+				var cres: String = String(cm["res"])
+				var cneed: int = int(cm["need"])
+				if GameState.amount(cres) >= cneed:
+					return Loc.t("Commission: give %d %s  [E]") % [cneed, Loc.t(cres)]
+				return "%s   (%d/%d %s)  [E]" % [Loc.t("Commission"), GameState.amount(cres), cneed, Loc.t(cres)]
 			_:
 				return Loc.t("Speak to the %s  [E]") % Loc.t(pillar)
 
@@ -988,7 +1202,7 @@ class Villager extends Node2D:
 		var st := _state()
 		if st == "new":
 			GameState.quests[pillar] = "active"
-			_toast(Loc.t("%s: “%s”") % [Loc.t(pillar.capitalize()), Loc.t(String(q["ask"]))], Palette.CYAN)
+			_toast(Loc.t("%s: “%s”") % [GameState.survivor_name(pillar), Loc.t(String(q["ask"]))], Palette.CYAN)
 		elif st == "active":
 			var need: int = int(q["need"])
 			if village.quest_progress(pillar) >= need:
@@ -1004,7 +1218,31 @@ class Villager extends Node2D:
 				var prog: int = village.quest_progress(pillar)
 				_toast("%s  —  %d/%d" % [Loc.t(String(q["title"])), prog, need], Palette.AMBER)
 		else:
-			_toast(Loc.t(String(q["thanks"])), Palette.AMBER)
+			_fulfil_commission()
+
+	# A repeatable errand once the story quest is done: trade a stack of materials for
+	# warmth (+ a little back), so a settled villager keeps giving the player something
+	# to do and warmth a steady sink (QA F-14 — no more inert village).
+	func _fulfil_commission() -> void:
+		var cm: Dictionary = Village.COMMISSIONS.get(pillar, {})
+		if cm.is_empty():
+			_toast(Loc.t(String(Village.QUESTS.get(pillar, {}).get("thanks", ""))), Palette.AMBER)
+			return
+		var res: String = String(cm["res"])
+		var need: int = int(cm["need"])
+		if GameState.amount(res) >= need:
+			GameState.spend({res: need})
+			var reward: Dictionary = cm["reward"]
+			for k in reward:
+				GameState.add_resource(String(k), int(reward[k]))
+			GameState.add_gwi(float(cm["gwi"]))
+			Vfx.embers(get_parent(), global_position, 16, Palette.GOLD)
+			Vfx.float_text(get_parent(), global_position + Vector2(0.0, -46.0),
+				Loc.t("Commission met!"), Palette.GOLD_L)
+			_toast(Loc.t("Commission met — the village grows warmer."), Palette.GOLD)
+		else:
+			_toast("%s  (%d/%d %s)" % [Loc.t(String(cm["ask"])),
+				GameState.amount(res), need, Loc.t(res)], Palette.AMBER)
 
 	func _toast(text: String, col: Color) -> void:
 		if village != null and village.hud != null and village.hud.has_method("toast"):

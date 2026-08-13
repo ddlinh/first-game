@@ -64,6 +64,7 @@ func _ready() -> void:
 	# pause (ALWAYS) while the game world pauses normally (PAUSABLE), so the bot can
 	# draft a boon instead of deadlocking on a paused, un-clickable card.
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	Main.skip_title = true   # the bot drives the world directly, past the title menu
 	main = Main.new()
 	main.process_mode = Node.PROCESS_MODE_PAUSABLE
 	add_child(main)

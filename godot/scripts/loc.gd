@@ -125,6 +125,70 @@ const VI := {
 		"Một ngôi làng cần tường vách. Dựng 3 công trình rồi ta lo phần còn lại.",
 	"Three roofs stand. This is a home again.": "Ba mái nhà đã đứng vững. Đây lại là mái nhà.",
 
+	# --- Build-menu card blurbs + placement banner ---
+	"Shelter for a survivor. Toughens you (+Max HP) on your next descent.":
+		"Chỗ trú cho một người sống sót. Ngươi bền hơn (+HP tối đa) ở lần xuống hang tới.",
+	"Work iron into blades. Sharpens your strikes (+Damage) below.":
+		"Rèn sắt thành đao. Đòn đánh sắc hơn (+Sát thương) khi xuống hang.",
+	"Tilled soil to grow food — seeds become Provisions that heal mid-run.":
+		"Đất đã cày để trồng lương — hạt giống thành Khẩu phần hồi máu giữa chừng.",
+	"Tend one more ring of wild land so you can build farther out.":
+		"Khai hoang thêm một vòng đất hoang để xây rộng ra ngoài.",
+	"Placing %s — left-click a tended tile to build   ·   Esc to cancel":
+		"Đang đặt %s — nhấn chuột trái lên ô đã khai hoang để xây   ·   Esc để huỷ",
+
+	# --- Villager commissions (repeatable errand once the quest is done) ---
+	"Commission": "Uỷ thác",
+	"Commission: give %d %s  [E]": "Uỷ thác: giao %d %s  [E]",
+	"Commission met!": "Đã hoàn uỷ thác!",
+	"Commission met — the village grows warmer.": "Đã hoàn uỷ thác — ngôi làng ấm hơn.",
+	"Keep the larder full — 4 food sees us through the cold.":
+		"Giữ kho lương đầy — 4 lương thực giúp ta qua mùa lạnh.",
+	"The forge is always hungry — 3 iron keeps it roaring.":
+		"Lò rèn luôn đói — 3 sắt giữ nó cháy rực.",
+	"There's always a roof to mend — 4 wood for the repairs.":
+		"Luôn có mái cần sửa — 4 gỗ để tu bổ.",
+
+	# --- Farmer → Farm chain (VILLAGE_DESIGN P1) ---
+	"Bring the Farmer %d wood & %d seeds — break the fallow ground (press E on it)":
+		"Mang cho Nông Dân %d gỗ & %d hạt giống — khai phá đất hoang (nhấn E lên nó)",
+	"Plant a seed on the farm — stand on it and press E":
+		"Gieo một hạt xuống nông trại — đứng lên nó và nhấn E",
+	"The Farmer breaks the fallow ground — the farm lives!":
+		"Nông Dân khai phá đất hoang — nông trại đã sống!",
+	"Break the fallow ground  (%d wood, %d seeds)  [E]":
+		"Khai phá đất hoang  (%d gỗ, %d hạt giống)  [E]",
+	"Fallow ground — needs %d wood, %d seeds  (you have %d, %d)":
+		"Đất hoang — cần %d gỗ, %d hạt giống  (ngươi có %d, %d)",
+	"The Farmer needs %d wood and %d seeds first.":
+		"Nông Dân cần %d gỗ và %d hạt giống trước đã.",
+
+	# --- Win screen (CRITIQUE B4/A1) ---
+	"THE WORLD IS REKINDLED": "THẾ GIỚI ĐÃ HỒI SINH",
+	"The long dark breaks. Warmth climbs back into the world — and it was you who carried it.":
+		"Đêm dài tan vỡ. Hơi ấm trở lại thế gian — và chính ngươi đã mang nó về.",
+	"Rest now, ember-bearer. What you remembered, and rebuilt, will outlast us both.":
+		"Hãy nghỉ ngơi, kẻ giữ lửa. Những gì ngươi nhớ và dựng lại sẽ trường tồn hơn cả hai ta.",
+	"Runs survived": "Lượt sống sót", "Rescued": "Đã cứu", "Buildings": "Công trình",
+	"Warmth": "Hơi ấm",
+	"Keep tending your village  ▸": "Tiếp tục chăm lo ngôi làng  ▸",
+
+	# --- Title screen + pause menu (CRITIQUE B1) ---
+	"Carry the last ember home.": "Mang tàn lửa cuối cùng trở về.",
+	"New Game": "Chơi Mới", "Continue": "Tiếp Tục", "Quit": "Thoát",
+	"PAUSED": "TẠM DỪNG", "Resume": "Tiếp tục", "Save Game": "Lưu Game",
+	"Quit to Title": "Về Màn Hình Chính", "Game saved.": "Đã lưu game.",
+
+	# --- Named survivors (CRITIQUE A2) ---
+	"Free %s the %s  [E]": "Giải cứu %s — %s  [E]",
+	"%s the %s joins you": "%s — %s gia nhập cùng ngươi",
+	"I know soil and season — give me ground, and I'll feed us all.":
+		"Ta hiểu đất và mùa vụ — cho ta mảnh đất, ta sẽ nuôi sống tất cả.",
+	"Iron sings if you know the heat. And I know the heat.":
+		"Sắt sẽ hát nếu ngươi hiểu lửa. Và ta thì hiểu lửa.",
+	"Show me a ruin, and I'll show you where the walls belong.":
+		"Chỉ ta một phế tích, ta sẽ chỉ ngươi nơi những bức tường thuộc về.",
+
 	# --- Attunements (name / desc / element) ---
 	"Bramble Ward": "Hộ Thân Gai", "Ember Fang": "Nanh Than Hồng", "Gale Step": "Bước Gió",
 	"+2 Max HP": "+2 HP tối đa", "+25% Damage": "+25% Sát thương", "+25% Speed": "+25% Tốc độ",

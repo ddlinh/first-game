@@ -21,6 +21,7 @@ func _ready() -> void:
 	# it shoot real post-tutorial combat instead of a frozen tutorial room.
 	GameState.combat_tutorial_seen = true
 	GameState.lang = "en"   # canonical English screenshots, regardless of the saved setting
+	Main.skip_title = true  # boot straight into the village, past the new title menu
 	main = Main.new()
 	main.process_mode = Node.PROCESS_MODE_PAUSABLE
 	add_child(main)
@@ -134,7 +135,33 @@ func _process(_delta: float) -> void:
 			print("AFTER_DEATH  _dead=", dead, "  combat_enabled=", enabled)
 		404:
 			await _shot("14_revived_village")
-		412:
+		410:
+			# Farm chain (VILLAGE_DESIGN P1): the Farmer lays out fallow ground that needs
+			# supplies before it can be worked.
+			if not GameState.has_rescued("farmer"):
+				GameState.rescued.append("farmer")
+			GameState.farm_state = "none"
+			main.call("return_to_village")
+		418:
+			await _shot("17_farm_fallow")
+		424:
+			# Win screen (CRITIQUE B4/A1): the Ember's epilogue at full warmth.
+			_hud().call("show_victory", {"runs": 4, "rescued": 3, "buildings": 5})
+		432:
+			await _shot("18_victory")
+		438:
+			_hud().call("_dismiss_victory")
+		444:
+			_hud().call("show_title")            # title screen (CRITIQUE B1)
+		452:
+			await _shot("19_title")
+		458:
+			_hud().call("_dismiss_title")
+		464:
+			_hud().call("toggle_pause")          # pause menu (CRITIQUE B1)
+		472:
+			await _shot("20_pause")
+		480:
 			get_tree().quit()
 
 # --- Scene poking -----------------------------------------------------------
@@ -186,10 +213,21 @@ func _open_menu() -> void:
 	var h := _hud()
 	if h == null:
 		return
+	# Full entries mirroring Village._open_build_menu (icon + effect blurb + warmth), so
+	# the canonical screenshot shows the real build-menu card, not a bare stub.
 	h.call("open_build_menu", [
-		{"id": "cabin", "label": "Cabin", "cost": {"wood": 5, "stone": 2}, "affordable": true},
-		{"id": "forge", "label": "Forge", "cost": {"stone": 4, "iron": 2}, "affordable": true},
-		{"id": "crop_bed", "label": "Crop Bed", "cost": {"wood": 3}, "affordable": false},
+		{"id": "cabin", "label": "Cabin", "cost": {"wood": 5, "stone": 2}, "affordable": true,
+			"tex": "building_cabin", "warm": 0.18,
+			"desc": "Shelter for a survivor. Toughens you (+Max HP) on your next descent."},
+		{"id": "forge", "label": "Forge", "cost": {"stone": 4, "iron": 2}, "affordable": true,
+			"tex": "building_forge", "warm": 0.15,
+			"desc": "Work iron into blades. Sharpens your strikes (+Damage) below."},
+		{"id": "crop_bed", "label": "Crop Bed", "cost": {"wood": 3}, "affordable": false,
+			"tex": "building_crop_bed", "warm": 0.05,
+			"desc": "Tilled soil to grow food — seeds become Provisions that heal mid-run."},
+		{"id": "expand", "label": "Expand Clearing", "cost": {"wood": 10, "stone": 6}, "affordable": true,
+			"tex": "tile_grass", "warm": 0.0,
+			"desc": "Tend one more ring of wild land so you can build farther out."},
 	])
 
 func _close_menu() -> void:

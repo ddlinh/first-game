@@ -19,11 +19,20 @@ const RES_ICON := {
 	"wood": "material_wood", "stone": "material_stone", "iron": "material_iron",
 	"food": "material_food", "seeds": "crop_3",
 }
+# GWI thresholds where the world visibly thaws (mirrors Village._dress_nature). The
+# warmth gauge marks these so the player reads warmth as progress toward real, visible
+# change — the way a survival/city-builder shows heat/hope milestones (Frostpunk).
+const WARMTH_MARKS := [0.12, 0.24, 0.40, 0.58]
 
 var _root: Control
 var _res_labels: Dictionary = {}
+var _res_chips: Dictionary = {}     # kind -> chip HBox, so a changed stock can pop
+var _res_prev: Dictionary = {}      # kind -> last count, to detect gains/spends
 var _hp_box: HBoxContainer
 var _gwi_fill: ColorRect
+var _warmth_pct: Label = null       # "42%" readout beside the WARMTH header
+var _warmth_marks: Control = null   # thaw-threshold ticks over the warmth trough
+var _gwi_val: float = 0.0           # last GWI, so the mark colours can be repainted
 var _flame_icon: TextureRect
 var _warmth_label: Label = null     # top-right "WARMTH" header, re-translated on L
 var _roster_box: HBoxContainer
@@ -32,6 +41,8 @@ var _toast_box: VBoxContainer
 var _menu: PanelContainer
 var _menu_open: bool = false
 var _menu_ids: Array[String] = []
+var _place_panel: PanelContainer = null   # "Placing X…" banner while a ghost is up
+var _place_label: Label = null
 var _depth_panel: PanelContainer
 var _depth_label: Label
 var _depth_val: int = 0             # last depth, so L can re-translate the banner live
@@ -112,6 +123,12 @@ var _lvl_from: int = 0
 var _lvl_to: int = 0
 var _lvl_armed: bool = false
 
+# --- Title screen + pause menu (CRITIQUE B1) ---
+var _title_root: Control = null
+var _pause_root: Control = null
+var _place_active: bool = false   # true while a build ghost follows the cursor (Esc = cancel, not pause)
+# --- Win screen (CRITIQUE B4/A1): the Ember's epilogue when the world rekindles ---
+var _victory_root: Control = null
 # --- Boon draft overlay (QA D-01): a paused pick-1-of-3 card raised on each Bloom.
 var _boon_root: Control = null
 var _boon_cb: Callable = Callable()        # Main's "picked" callback
@@ -170,6 +187,7 @@ func _build_ui() -> void:
 		var lab := _make_label("0", 18, Palette.WHITE)
 		chip.add_child(lab)
 		_res_labels[kind] = lab
+		_res_chips[kind] = chip
 		res_row.add_child(chip)
 
 	# --- Top-right: WARMTH gauge + roster (village economy; hidden in combat) ---
@@ -194,6 +212,14 @@ func _build_ui() -> void:
 	head.add_child(_flame_icon)
 	_warmth_label = _make_label("WARMTH", 13, Palette.AMBER)
 	head.add_child(_warmth_label)
+	# A live percentage pushed to the right of the header, so warmth reads as a number
+	# and not just a bar length.
+	var wsp := Control.new()
+	wsp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_ignore(wsp)
+	head.add_child(wsp)
+	_warmth_pct = _make_label("0%", 13, Palette.GOLD_L)
+	head.add_child(_warmth_pct)
 
 	# Framed warmth trough: a gilded panel with the fill inset inside it.
 	var bar_frame := Panel.new()
@@ -207,6 +233,13 @@ func _build_ui() -> void:
 	_gwi_fill.size = Vector2(0, 12)
 	_ignore(_gwi_fill)
 	bar_frame.add_child(_gwi_fill)
+	# Thaw-milestone ticks drawn over the fill: reached = gold, the next one to reach
+	# is highlighted, later ones dim — so you can see the next visible thaw coming.
+	_warmth_marks = Control.new()
+	_warmth_marks.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_ignore(_warmth_marks)
+	bar_frame.add_child(_warmth_marks)
+	_warmth_marks.draw.connect(_draw_warmth_marks)
 
 	_roster_box = HBoxContainer.new()
 	_roster_box.add_theme_constant_override("separation", 3)
@@ -265,10 +298,23 @@ func _build_ui() -> void:
 	_menu = PanelContainer.new()
 	_menu.add_theme_stylebox_override("panel", _menu_style())
 	_menu.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	_menu.position = Vector2(-160, -120)
-	_menu.custom_minimum_size = Vector2(320, 0)
+	_menu.position = Vector2(-198, -300)
+	_menu.custom_minimum_size = Vector2(396, 0)
 	_menu.visible = false
 	_root.add_child(_menu)
+
+	# --- Placement banner: top centre, shown only while a build ghost follows the
+	# cursor, so the player always knows what they're dropping and how to commit/cancel.
+	_place_panel = _panel()
+	_place_panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
+	_place_panel.position = Vector2(-200, 48)
+	_place_panel.custom_minimum_size = Vector2(400, 0)
+	_place_panel.visible = false
+	_root.add_child(_place_panel)
+	_place_label = _make_label("", 16, Palette.GOLD_L)
+	_place_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_place_label.custom_minimum_size = Vector2(376, 0)
+	_place_panel.add_child(_place_label)
 
 	_build_vitals()
 	_build_foe_chip()
@@ -624,9 +670,31 @@ func _ignore(c: Control) -> void:
 # ---------------------------------------------------------------------------
 func _refresh_resources(_a := 0) -> void:
 	for kind in RES_ORDER:
-		if _res_labels.has(kind):
-			var lab: Label = _res_labels[kind]
-			lab.text = str(GameState.amount(kind))
+		if not _res_labels.has(kind):
+			continue
+		var lab: Label = _res_labels[kind]
+		var val: int = GameState.amount(kind)
+		var prev: int = int(_res_prev.get(kind, val))
+		lab.text = str(val)
+		# Dim a depleted stock so "you're out of X" reads at a glance.
+		lab.add_theme_color_override("font_color", Palette.UI_DIM if val == 0 else Palette.WHITE)
+		# Pop the chip when the count moves — gold on a gain, ember on a spend — so the
+		# economy feels responsive (the farming-sim resource-counter pop).
+		if val != prev and _res_chips.has(kind):
+			_pop_res_chip(_res_chips[kind], val > prev)
+		_res_prev[kind] = val
+
+func _pop_res_chip(chip: Control, gained: bool) -> void:
+	if chip == null or not is_instance_valid(chip):
+		return
+	chip.pivot_offset = chip.size * 0.5
+	chip.scale = Vector2(1.35, 1.35)
+	var tw := chip.create_tween()
+	tw.tween_property(chip, "scale", Vector2.ONE, 0.24) \
+		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	chip.modulate = Palette.GOLD_L if gained else Palette.EMBER
+	var tw2 := chip.create_tween()
+	tw2.tween_property(chip, "modulate", Color(1, 1, 1, 1), 0.4)
 
 func set_hp(hp: int, max_hp: int) -> void:
 	if _hp_box == null:
@@ -955,14 +1023,36 @@ func set_gwi(v: float) -> void:
 	if _gwi_fill == null:
 		return
 	var w: float = clampf(v, 0.0, 1.0)
+	_gwi_val = w
 	_gwi_fill.size = Vector2(174.0 * w, 12)
 	_gwi_fill.color = Palette.GWI_COLD.lerp(Palette.GWI_WARM, w)
 	# The flame stays a flame — dim ember when cold, bright gold when warm — instead
 	# of tinting cold blue-grey and reading as a water droplet (QA F-26).
 	if _flame_icon != null:
 		_flame_icon.modulate = Palette.EMBER.lerp(Palette.GOLD_L, w)
+	if _warmth_pct != null:
+		_warmth_pct.text = "%d%%" % int(round(w * 100.0))
+	if _warmth_marks != null:
+		_warmth_marks.queue_redraw()
 	# Warmth feeds Soil, so the village head-start meter tracks it.
 	_refresh_progress_bar()
+
+# Thaw-milestone ticks over the warmth trough: reached thresholds glow gold, the next
+# one to reach is highlighted (the goal to aim for), later ones stay dim.
+func _draw_warmth_marks() -> void:
+	if _warmth_marks == null:
+		return
+	var h: float = _warmth_marks.size.y
+	var next_marked: bool = false
+	for thr in WARMTH_MARKS:
+		var x: float = 2.0 + 174.0 * float(thr)
+		if _gwi_val + 0.0001 >= float(thr):
+			_warmth_marks.draw_line(Vector2(x, 2.0), Vector2(x, h - 2.0), Palette.GOLD_L, 1.0)
+		elif not next_marked:
+			_warmth_marks.draw_line(Vector2(x, 1.0), Vector2(x, h - 1.0), Palette.AMBER, 2.0)
+			next_marked = true
+		else:
+			_warmth_marks.draw_line(Vector2(x, 2.0), Vector2(x, h - 2.0), Palette.UI_EDGE_D, 1.0)
 
 # ---------------------------------------------------------------------------
 # Progression readout: combat = the live Kindle/succession bar (self-polled in
@@ -1672,6 +1762,11 @@ func toast(text: String, color: Color = Color("f7c59f")) -> void:
 	tw.tween_callback(l.queue_free)
 
 # ---------------------------------------------------------------------------
+# The build menu is a stack of information cards — icon, name, one-line effect,
+# per-resource cost (red where you're short), and a warmth badge — instead of a bare
+# cost list. Modelled on a farming/city-builder's build palette (Stardew carpenter,
+# Cities:Skylines cost preview): you choose by what a structure DOES, and can see at a
+# glance which material is blocking you. Keyboard 1-4 and click both still select.
 func open_build_menu(entries: Array) -> void:
 	_menu_open = true
 	_menu_ids.clear()
@@ -1679,29 +1774,117 @@ func open_build_menu(entries: Array) -> void:
 		c.queue_free()
 	var vb := VBoxContainer.new()
 	vb.add_theme_constant_override("separation", 8)
+	_ignore(vb)
 	_menu.add_child(vb)
 	vb.add_child(_make_label("BUILD   (Esc to cancel)", 20, Palette.EMBER))
 	var n := 1
 	for e in entries:
 		var id: String = str(e["id"])
 		_menu_ids.append(id)
-		var cost_str := _cost_to_string(e["cost"])
-		var affordable: bool = bool(e["affordable"])
-		var b := Button.new()
-		b.text = "%d.  %s   —   %s" % [n, Loc.t(str(e["label"])), cost_str]
-		b.disabled = not affordable
-		b.focus_mode = Control.FOCUS_NONE
-		b.add_theme_font_size_override("font_size", 17)
-		b.add_theme_color_override("font_color", Palette.UI_TEXT)
-		b.add_theme_color_override("font_color_disabled", Palette.UI_DIM)
-		b.add_theme_stylebox_override("normal", _button_style(false))
-		b.add_theme_stylebox_override("hover", _button_style(true))
-		b.add_theme_stylebox_override("pressed", _button_style(true))
-		b.add_theme_stylebox_override("disabled", _button_style(false))
-		b.pressed.connect(_select.bind(id))
-		vb.add_child(b)
+		vb.add_child(_build_card(n, e))
 		n += 1
 	_menu.visible = true
+
+# One build-menu card. Left-clickable (and number-key selectable via open_build_menu);
+# greyed when unaffordable, but its costs still read so the player sees what to gather.
+func _build_card(n: int, e: Dictionary) -> Button:
+	var id: String = str(e["id"])
+	var affordable: bool = bool(e.get("affordable", true))
+	var b := Button.new()
+	b.custom_minimum_size = Vector2(360, 128)   # room for header + 2-line desc + cost row
+	b.focus_mode = Control.FOCUS_NONE
+	b.disabled = not affordable
+	b.add_theme_stylebox_override("normal", _button_style(false))
+	b.add_theme_stylebox_override("hover", _button_style(true))
+	b.add_theme_stylebox_override("pressed", _button_style(true))
+	b.add_theme_stylebox_override("disabled", _button_style(false))
+	b.pressed.connect(_select.bind(id))
+
+	# A Button is not a Container: anchor a VBox to the button's full rect so its rows
+	# get real widths and lay out (the same trick the boon cards use). Inset a little so
+	# content clears the gilded border.
+	var vb := VBoxContainer.new()
+	vb.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	vb.offset_left = 14
+	vb.offset_top = 8
+	vb.offset_right = -14
+	vb.offset_bottom = -8
+	vb.alignment = BoxContainer.ALIGNMENT_CENTER
+	vb.add_theme_constant_override("separation", 4)
+	vb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	b.add_child(vb)
+
+	# Header row: building thumbnail + "n. Name", with a warmth badge pushed right.
+	var header := HBoxContainer.new()
+	header.add_theme_constant_override("separation", 10)
+	header.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vb.add_child(header)
+	var icon := TextureRect.new()
+	icon.custom_minimum_size = Vector2(44, 44)
+	# IGNORE_SIZE so a big building texture doesn't force the TextureRect to its own
+	# native size (which would balloon the card) — keep it a fixed 44px thumbnail.
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	var tex_key: String = String(e.get("tex", ""))
+	if tex_key != "" and Assets.has(tex_key):
+		icon.texture = Assets.tex(tex_key)
+	_ignore(icon)
+	header.add_child(icon)
+	var name_lab := _make_label("%d.  %s" % [n, Loc.t(str(e.get("label", "?")))], 18, Palette.GOLD_L)
+	name_lab.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	header.add_child(name_lab)
+	var warm: float = float(e.get("warm", 0.0))
+	if warm > 0.0:
+		var spacer := Control.new()
+		spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		_ignore(spacer)
+		header.add_child(spacer)
+		var flame := TextureRect.new()
+		flame.texture = Assets.tex("ui_flame")
+		flame.custom_minimum_size = Vector2(13, 16)
+		flame.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		flame.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		_ignore(flame)
+		header.add_child(flame)
+		var wl := _make_label("+%d%%" % int(round(warm * 100.0)), 13, Palette.AMBER)
+		wl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		header.add_child(wl)
+
+	var desc: String = String(e.get("desc", ""))
+	if desc != "":
+		var d := _make_label(desc, 13, Palette.UI_TEXT)
+		d.autowrap_mode = TextServer.AUTOWRAP_WORD
+		d.custom_minimum_size = Vector2(0, 34)   # reserve 2 lines so autowrap can't collapse it
+		vb.add_child(d)
+
+	vb.add_child(_cost_row(e.get("cost", {})))
+	return b
+
+# A row of cost chips: material icon + amount, amount reddened when you can't afford it
+# (the at-a-glance "which resource is short" cue every city-builder gives you).
+func _cost_row(cost: Dictionary) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for k in cost:
+		var need: int = int(cost[k])
+		var have: int = GameState.amount(String(k))
+		var chip := HBoxContainer.new()
+		chip.add_theme_constant_override("separation", 3)
+		chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var icon := TextureRect.new()
+		var ikey: String = String(RES_ICON.get(String(k), ""))
+		if ikey != "" and Assets.has(ikey):
+			icon.texture = Assets.tex(ikey)
+		icon.custom_minimum_size = Vector2(16, 16)
+		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		_ignore(icon)
+		chip.add_child(icon)
+		chip.add_child(_make_label(str(need), 15, Palette.WHITE if have >= need else Palette.BLOOD))
+		row.add_child(chip)
+	return row
 
 func _button_style(hot: bool) -> StyleBoxFlat:
 	var sb := StyleBoxFlat.new()
@@ -1719,15 +1902,240 @@ func close_build_menu() -> void:
 	_menu_open = false
 	_menu.visible = false
 
+# Raise / drop the "Placing X…" banner (the Village calls these around a build ghost).
+func show_place_banner(build_name: String, _cost: Dictionary = {}) -> void:
+	_place_active = true
+	if _place_panel == null:
+		return
+	_place_label.text = Loc.t("Placing %s — left-click a tended tile to build   ·   Esc to cancel") % Loc.t(build_name)
+	_place_panel.visible = true
+
+func hide_place_banner() -> void:
+	_place_active = false
+	if _place_panel != null:
+		_place_panel.visible = false
+
+# ---------------------------------------------------------------------------
+# Title screen + pause menu (CRITIQUE B1). Both are paused full-screen overlays with
+# big menu buttons; they share the _big_button helper and the _menu_style panel.
+
+# A large stacked menu button used by the title and pause screens.
+func _big_button(text: String) -> Button:
+	var b := Button.new()
+	b.text = Loc.t(text)
+	b.focus_mode = Control.FOCUS_NONE
+	b.custom_minimum_size = Vector2(300, 46)
+	b.add_theme_font_size_override("font_size", 20)
+	b.add_theme_color_override("font_color", Palette.UI_TEXT)
+	b.add_theme_stylebox_override("normal", _button_style(false))
+	b.add_theme_stylebox_override("hover", _button_style(true))
+	b.add_theme_stylebox_override("pressed", _button_style(true))
+	return b
+
+func _quit_game() -> void:
+	get_tree().quit()
+
+func show_title() -> void:
+	if _title_root != null and is_instance_valid(_title_root):
+		return
+	get_tree().paused = true
+	_title_root = Control.new()
+	_title_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_title_root.process_mode = Node.PROCESS_MODE_ALWAYS
+	_root.add_child(_title_root)
+	var dim := ColorRect.new()
+	dim.color = Color(0.03, 0.02, 0.05, 0.97)
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	_title_root.add_child(dim)
+	var cc := CenterContainer.new()
+	cc.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	cc.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_title_root.add_child(cc)
+	var vb := VBoxContainer.new()
+	vb.add_theme_constant_override("separation", 12)
+	vb.alignment = BoxContainer.ALIGNMENT_CENTER
+	vb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cc.add_child(vb)
+	var seal := TextureRect.new()
+	seal.texture = Assets.tex("ui_ember_seal")
+	seal.custom_minimum_size = Vector2(76, 76)
+	seal.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	seal.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_ignore(seal)
+	vb.add_child(seal)
+	var title := _make_label("REKINDLED", 52, Palette.GOLD_L)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vb.add_child(title)
+	var sub := _make_label("Carry the last ember home.", 18, Palette.AMBER)
+	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vb.add_child(sub)
+	var spacer := Control.new()
+	spacer.custom_minimum_size = Vector2(0, 12)
+	_ignore(spacer)
+	vb.add_child(spacer)
+	var nb := _big_button("New Game")
+	nb.pressed.connect(_title_new)
+	vb.add_child(nb)
+	if GameState.has_save():
+		var cb := _big_button("Continue")
+		cb.pressed.connect(_title_continue)
+		vb.add_child(cb)
+	var qb := _big_button("Quit")
+	qb.pressed.connect(_quit_game)
+	vb.add_child(qb)
+
+func _dismiss_title() -> void:
+	get_tree().paused = false
+	if _title_root != null and is_instance_valid(_title_root):
+		_title_root.queue_free()
+		_title_root = null
+
+func _title_new() -> void:
+	_dismiss_title()
+	Main.start_new_game()
+
+func _title_continue() -> void:
+	_dismiss_title()
+	Main.continue_game()
+
+# --- Pause menu (Esc during play) ---
+func toggle_pause() -> void:
+	if _pause_root != null and is_instance_valid(_pause_root):
+		_close_pause()
+		return
+	# Never pause on top of another modal.
+	if _title_root != null and is_instance_valid(_title_root): return
+	if _victory_root != null and is_instance_valid(_victory_root): return
+	if _boon_root != null and is_instance_valid(_boon_root): return
+	if _menu_open or _place_active or _dlg_await: return
+	get_tree().paused = true
+	_pause_root = Control.new()
+	_pause_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_pause_root.process_mode = Node.PROCESS_MODE_ALWAYS
+	_root.add_child(_pause_root)
+	var dim := ColorRect.new()
+	dim.color = Color(0.02, 0.02, 0.04, 0.82)
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	_pause_root.add_child(dim)
+	var cc := CenterContainer.new()
+	cc.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	cc.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_pause_root.add_child(cc)
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", _menu_style())
+	cc.add_child(panel)
+	var vb := VBoxContainer.new()
+	vb.add_theme_constant_override("separation", 12)
+	vb.alignment = BoxContainer.ALIGNMENT_CENTER
+	vb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.add_child(vb)
+	var t := _make_label("PAUSED", 30, Palette.GOLD_L)
+	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vb.add_child(t)
+	var rb := _big_button("Resume")
+	rb.pressed.connect(_close_pause)
+	vb.add_child(rb)
+	var sb := _big_button("Save Game")
+	sb.pressed.connect(_pause_save)
+	vb.add_child(sb)
+	var qb := _big_button("Quit to Title")
+	qb.pressed.connect(_pause_quit_title)
+	vb.add_child(qb)
+
+func _close_pause() -> void:
+	get_tree().paused = false
+	if _pause_root != null and is_instance_valid(_pause_root):
+		_pause_root.queue_free()
+		_pause_root = null
+
+func _pause_save() -> void:
+	Main.save_now()
+	_close_pause()
+	toast(Loc.t("Game saved."), Palette.MOSS_L)
+
+func _pause_quit_title() -> void:
+	_close_pause()
+	Main.quit_to_title()
+
+# ---------------------------------------------------------------------------
+# Win screen (CRITIQUE B4/A1): the world fully rekindled. Pause and raise the Ember's
+# epilogue over a warm glow, with the run tally and a button to keep tending the village.
+func show_victory(stats: Dictionary) -> void:
+	if _victory_root != null and is_instance_valid(_victory_root):
+		return
+	get_tree().paused = true
+	_victory_root = Control.new()
+	_victory_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_victory_root.process_mode = Node.PROCESS_MODE_ALWAYS   # alive while the world is paused
+	_root.add_child(_victory_root)
+	var dim := ColorRect.new()
+	dim.color = Color(0.12, 0.07, 0.02, 0.9)               # warm dark, not the cold void
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP           # swallow clicks behind it
+	_victory_root.add_child(dim)
+	var cc := CenterContainer.new()
+	cc.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	cc.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_victory_root.add_child(cc)
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", _menu_style())
+	cc.add_child(panel)
+	var vb := VBoxContainer.new()
+	vb.add_theme_constant_override("separation", 14)
+	vb.alignment = BoxContainer.ALIGNMENT_CENTER
+	vb.custom_minimum_size = Vector2(580, 0)
+	vb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.add_child(vb)
+	var seal := TextureRect.new()
+	seal.texture = Assets.tex("ui_ember_seal")
+	seal.custom_minimum_size = Vector2(56, 56)
+	seal.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	seal.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_ignore(seal)
+	vb.add_child(seal)
+	var title := _make_label("THE WORLD IS REKINDLED", 30, Palette.GOLD_L)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vb.add_child(title)
+	for line in [
+		"The long dark breaks. Warmth climbs back into the world — and it was you who carried it.",
+		"Rest now, ember-bearer. What you remembered, and rebuilt, will outlast us both.",
+	]:
+		var l := _make_label(line, 16, Palette.UI_TEXT)
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD
+		l.custom_minimum_size = Vector2(540, 0)
+		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		vb.add_child(l)
+	var tally := "%s %d      %s %d      %s %d      %s 100%%" % [
+		Loc.t("Runs survived"), int(stats.get("runs", 0)),
+		Loc.t("Rescued"), int(stats.get("rescued", 0)),
+		Loc.t("Buildings"), int(stats.get("buildings", 0)),
+		Loc.t("Warmth")]
+	var tl := _make_label(tally, 15, Palette.AMBER)
+	tl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vb.add_child(tl)
+	var btn := Button.new()
+	btn.text = Loc.t("Keep tending your village  ▸")
+	btn.focus_mode = Control.FOCUS_NONE
+	btn.custom_minimum_size = Vector2(0, 44)
+	btn.add_theme_font_size_override("font_size", 18)
+	btn.add_theme_color_override("font_color", Palette.UI_TEXT)
+	btn.add_theme_stylebox_override("normal", _button_style(false))
+	btn.add_theme_stylebox_override("hover", _button_style(true))
+	btn.add_theme_stylebox_override("pressed", _button_style(true))
+	btn.pressed.connect(_dismiss_victory)
+	vb.add_child(btn)
+
+func _dismiss_victory() -> void:
+	get_tree().paused = false
+	if _victory_root != null and is_instance_valid(_victory_root):
+		_victory_root.queue_free()
+		_victory_root = null
+
 func _select(id: String) -> void:
 	close_build_menu()
 	build_selected.emit(id)
-
-func _cost_to_string(cost: Dictionary) -> String:
-	var parts: Array[String] = []
-	for k in cost:
-		parts.append("%d %s" % [int(cost[k]), Loc.t(str(k))])
-	return ", ".join(parts)
 
 # ---------------------------------------------------------------------------
 # Boon draft overlay (QA D-01): a paused pick-1-of-3 card raised on every Bloom.
@@ -1767,15 +2175,19 @@ func open_boon_cards(cards: Array, cb: Callable) -> void:
 	row.add_theme_constant_override("separation", 16)
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	col.add_child(row)
+	var num := 1
 	for card: Dictionary in cards:
 		_boon_ids.append(String(card.get("id", "")))
-		row.add_child(_boon_card(card))
-	var hint := _make_label("Pick one — click a card", 14, Palette.UI_DIM)
+		row.add_child(_boon_card(card, num))
+		num += 1
+	# Keyboard-selectable now (CRITIQUE B5): the HUD processes during the paused draft.
+	process_mode = Node.PROCESS_MODE_ALWAYS
+	var hint := _make_label("Pick one — click a card, or press 1 / 2 / 3", 14, Palette.UI_DIM)
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	col.add_child(hint)
 
 # One boon card: a styled button whose whole face reacts, name over effect line.
-func _boon_card(card: Dictionary) -> Control:
+func _boon_card(card: Dictionary, num: int = 0) -> Control:
 	var b := Button.new()
 	b.custom_minimum_size = Vector2(198, 152)
 	b.focus_mode = Control.FOCUS_NONE
@@ -1789,7 +2201,10 @@ func _boon_card(card: Dictionary) -> Control:
 	vb.add_theme_constant_override("separation", 10)
 	vb.mouse_filter = Control.MOUSE_FILTER_IGNORE       # clicks fall through to the button
 	b.add_child(vb)
-	var nm := _make_label(String(card.get("name", "?")), 20, Palette.GOLD_L)
+	var nm_text := Loc.t(String(card.get("name", "?")))
+	if num > 0:
+		nm_text = "[%d]  %s" % [num, nm_text]   # the number key that also picks this card
+	var nm := _make_label(nm_text, 20, Palette.GOLD_L)
 	nm.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	nm.autowrap_mode = TextServer.AUTOWRAP_WORD
 	nm.custom_minimum_size = Vector2(176, 0)
@@ -1805,6 +2220,7 @@ func _pick_boon(id: String) -> void:
 	var cb := _boon_cb
 	_boon_cb = Callable()
 	_boon_ids.clear()
+	process_mode = Node.PROCESS_MODE_INHERIT   # stop processing under pause again
 	if _boon_root != null and is_instance_valid(_boon_root):
 		_boon_root.queue_free()
 		_boon_root = null
@@ -1830,6 +2246,21 @@ func _boon_name(id: String) -> String:
 	return id.capitalize()
 
 func _input(event: InputEvent) -> void:
+	# The Bloom draft is keyboard-selectable (CRITIQUE B5): 1/2/3 pick a card. While the
+	# draft is up it swallows other HUD keys so nothing else fires under the paused world.
+	if _boon_root != null and is_instance_valid(_boon_root):
+		if event is InputEventKey and event.pressed and not event.echo:
+			match event.physical_keycode:
+				KEY_1:
+					pick_boon_index(0)
+					get_viewport().set_input_as_handled()
+				KEY_2:
+					pick_boon_index(1)
+					get_viewport().set_input_as_handled()
+				KEY_3:
+					pick_boon_index(2)
+					get_viewport().set_input_as_handled()
+		return
 	# A waiting dialogue line takes input first (click / E / Enter — never Space,
 	# so advancing never also dashes). First press finishes the typewriter.
 	if _dlg_await:
@@ -1870,12 +2301,26 @@ func _input(event: InputEvent) -> void:
 		GameState.toggle_lang()
 		get_viewport().set_input_as_handled()
 		return
-	if not _menu_open:
-		return
+	# Esc (cancel): the build menu and an in-progress placement own it; otherwise it
+	# toggles the pause menu (CRITIQUE B1). Overlays that manage themselves are skipped.
 	if event.is_action_pressed("cancel"):
-		close_build_menu()
-		build_cancelled.emit()
+		if _menu_open:
+			close_build_menu()
+			build_cancelled.emit()
+			get_viewport().set_input_as_handled()
+			return
+		if _pause_root != null and is_instance_valid(_pause_root):
+			_close_pause()
+			get_viewport().set_input_as_handled()
+			return
+		if _place_active or (_title_root != null and is_instance_valid(_title_root)) \
+				or (_victory_root != null and is_instance_valid(_victory_root)) \
+				or (_boon_root != null and is_instance_valid(_boon_root)):
+			return   # placement cancel handled by the village; other modals use buttons
+		toggle_pause()
 		get_viewport().set_input_as_handled()
+		return
+	if not _menu_open:
 		return
 	if event is InputEventKey and event.pressed and not event.echo:
 		var idx := -1

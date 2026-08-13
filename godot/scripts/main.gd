@@ -53,12 +53,16 @@ const GRADE_GRAIN := 0.42
 
 # Set in _ready so the static hooks below can find the live rig from anywhere.
 static var _inst: Main = null
+# The capture / autoplay harnesses set this before instancing Main so they boot straight
+# into the village instead of stopping at the title menu (CRITIQUE B1).
+static var skip_title: bool = false
 
 var _layer: Node2D = null
 var _player: Player = null
 var _hud: Hud = null
 var _camera: Camera2D = null
 var _returning: bool = false
+var _game_started: bool = false   # false at the title backdrop; true once New/Continue runs
 
 # --- Camera state ---
 var _body := Damper.new()        # smoothed camera position
@@ -114,7 +118,29 @@ func _ready() -> void:
 
 	_setup_post()
 	_setup_beacon()
-	return_to_village()
+	# The win state (CRITIQUE B4/A1): full warmth raises the Ember's epilogue.
+	GameState.game_won.connect(_on_game_won)
+	# Boot to the title screen (CRITIQUE B1). New Game / Continue start the world;
+	# without a title (older HUD) fall back to dropping straight into the village.
+	if _hud.has_method("show_title") and not skip_title:
+		_hud.show_title()
+	else:
+		_game_started = true
+		return_to_village()
+
+# The world fully rekindled. Raise the Ember's epilogue over a paused world — the
+# rekindling payoff the VISION is built around.
+func _on_game_won() -> void:
+	if _hud != null and _hud.has_method("show_victory"):
+		var built := 0
+		for key in GameState.grid.keys():
+			if bool((GameState.grid[key] as Dictionary).get("built", false)):
+				built += 1
+		_hud.show_victory({
+			"runs": GameState.run_count,
+			"rescued": GameState.rescued.size(),
+			"buildings": built,
+		})
 
 # A gold chevron that hovers over whatever the current layer says the objective is.
 func _setup_beacon() -> void:
@@ -163,6 +189,31 @@ static func zoom_punch(amount: float) -> void:
 static func set_grade(warm: float, vignette: float = 1.0, bloom: float = 0.7) -> void:
 	if _inst != null and is_instance_valid(_inst):
 		_inst._apply_grade(warm, vignette, bloom)
+
+# --- Title / save flow (CRITIQUE B1/B2), driven by the HUD's title & pause menus ---
+static func start_new_game() -> void:
+	if _inst == null: return
+	GameState.reset_all()
+	GameState.clear_save()
+	_inst._game_started = true
+	_inst.return_to_village()
+
+static func continue_game() -> void:
+	if _inst == null: return
+	GameState.load_game()
+	_inst._game_started = true
+	_inst.return_to_village()
+
+static func quit_to_title() -> void:
+	if _inst == null: return
+	GameState.save_game()
+	_inst._game_started = false
+	if _inst._hud != null and _inst._hud.has_method("show_title"):
+		_inst._hud.show_title()
+
+static func save_now() -> void:
+	if _inst != null:
+		GameState.save_game()
 
 ## Fire a one-time contextual tutorial line, from anywhere (survivor, crop, gate…).
 static func tip(key: String, text: String) -> void:
@@ -273,6 +324,10 @@ func return_to_village() -> void:
 	var v := Village.new()
 	_install_layer(v, false)
 	v.expedition_requested.connect(start_dungeon)
+	# Autosave on settling back in the village (CRITIQUE B2), once a game is actually
+	# under way — never from the title backdrop.
+	if _game_started:
+		GameState.save_game()
 
 func _install_layer(layer: Node2D, is_dungeon: bool, fresh_run: bool = true) -> void:
 	# Detach the persistent actors — the hero AND any freed survivors trailing him —
