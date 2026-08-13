@@ -36,6 +36,12 @@ const BUILDINGS := {
 const FARM_CELL := Vector2i(2, 1)
 const FARM_SETUP := {"wood": 6, "seeds": 4}   # what the Farmer needs to break the fallow ground
 
+# Buildings can be upgraded Lv1→3 (VILLAGE_DESIGN P2/V6): each tier deepens the run-boon
+# and warmth, and the structure visibly grows. Only the two combat buildings upgrade
+# this way; the farm has its own Farmer-driven progression.
+const MAX_BUILD_LEVEL := 3
+const UPGRADABLE := {"cabin": true, "forge": true}
+
 # One quest per rescued pillar. `res` is the resource threshold to reach; on turn-in
 # the pillar rewards warmth (GWI) plus materials. Keeps the village loop purposeful.
 const QUESTS := {
@@ -74,6 +80,8 @@ var hud
 var _supply_gate: Node2D = null
 # Holds the ground tiles so the clearing can be re-rendered when it expands.
 var _ground: Node2D = null
+# cell -> the building's visual root, so an upgrade can rescale it in place.
+var _building_roots: Dictionary = {}
 # Cells occupied by the stream — walkable but never buildable.
 var _river_cells: Dictionary = {}
 
@@ -520,6 +528,65 @@ func _add_building_sprite(cell: Vector2i, build_id: String) -> void:
 		cs.shape = rect
 		body.add_child(cs)
 		add_child(body)
+	# Upgrade support (VILLAGE_DESIGN P2): remember the visual root so an upgrade can
+	# grow it, scale it now to its recorded tier, and — for the two upgradable combat
+	# buildings — drop an interactable upgrade post beside it.
+	var level: int = maxi(1, int(GameState.grid.get(cell, {}).get("level", 1)))
+	_building_roots[cell] = root
+	root.scale = Vector2.ONE * _level_scale(level)
+	if UPGRADABLE.has(build_id):
+		var post := UpgradePost.new()
+		post.village = self
+		post.cell = cell
+		post.build_id = build_id
+		post.position = cell_to_world(cell)
+		add_child(post)
+
+# Visual size per tier: a Lv3 building stands notably taller than a fresh Lv1 (P2).
+func _level_scale(level: int) -> float:
+	return 1.0 + float(clampi(level, 1, MAX_BUILD_LEVEL) - 1) * 0.14
+
+# The escalating upgrade cost: the base build cost times the current level, so each tier
+# asks more than the last.
+func _upgrade_cost(build_id: String, from_level: int) -> Dictionary:
+	var base: Dictionary = BUILDINGS.get(build_id, {}).get("cost", {})
+	var out: Dictionary = {}
+	for k in base:
+		out[k] = int(base[k]) * from_level
+	return out
+
+func _cost_str(cost: Dictionary) -> String:
+	var parts: Array[String] = []
+	for k in cost:
+		parts.append("%d %s" % [int(cost[k]), Loc.t(String(k))])
+	return ", ".join(parts)
+
+# Spend the escalating cost to raise a building a tier: deepen its boon (via the stored
+# level), grow the sprite, warm the world a notch, and celebrate (VILLAGE_DESIGN P2/V6).
+func _upgrade_building(cell: Vector2i, build_id: String) -> void:
+	var d: Dictionary = GameState.grid.get(cell, {})
+	var lv: int = maxi(1, int(d.get("level", 1)))
+	if lv >= MAX_BUILD_LEVEL:
+		return
+	var cost: Dictionary = _upgrade_cost(build_id, lv)
+	if not GameState.can_afford(cost):
+		if hud:
+			hud.toast(Loc.t("Not enough materials"), Palette.BLOOD)
+		return
+	GameState.spend(cost)
+	d["level"] = lv + 1
+	GameState.grid[cell] = d
+	if _building_roots.has(cell) and is_instance_valid(_building_roots[cell]):
+		var root: Node2D = _building_roots[cell]
+		var tw := root.create_tween()
+		tw.tween_property(root, "scale", Vector2.ONE * _level_scale(lv + 1), 0.25) \
+			.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	var info: Dictionary = BUILDINGS.get(build_id, {})
+	GameState.add_gwi(float(info.get("gwi", 0.0)) * 0.5 / float(lv + 1))   # a smaller warmth step per tier
+	Vfx.embers(self, cell_to_world(cell), 20, Palette.GOLD)
+	Sfx.play("warm", -4.0)
+	if hud:
+		hud.toast(Loc.t("%s upgraded to Lv %d!") % [Loc.t(String(info.get("label", build_id))), lv + 1], Palette.GOLD)
 
 # A repeating puff of smoke/sparks from a finished building, re-arming itself so the
 # chimney keeps breathing (cabin) and the forge keeps sparking — the little signs of
@@ -736,7 +803,7 @@ func _try_place() -> void:
 			hud.toast("Not enough materials", Palette.BLOOD)
 		return
 	GameState.spend(cost)
-	GameState.grid[cell] = {"type": _place_id, "built": false}
+	GameState.grid[cell] = {"type": _place_id, "built": false, "level": 1}
 	_spawn_scaffold(cell, _place_id)
 	_exit_placement()
 	Main.tip("hammer", "That's a frame. Stand beside it and tap E a few times to hammer it up.")
@@ -938,6 +1005,35 @@ class FallowPlot extends Node2D:
 		queue_free()
 		if v != null and is_instance_valid(v):
 			v._activate_farm(c)
+
+# An interactable beside an upgradable building (VILLAGE_DESIGN P2): press E to spend the
+# escalating cost and raise it a tier. Drops out of the interaction set at max level.
+class UpgradePost extends Node2D:
+	var village: Village = null
+	var cell: Vector2i = Vector2i.ZERO
+	var build_id: String = ""
+
+	func _ready() -> void:
+		add_to_group("interactable")
+
+	func _level() -> int:
+		return maxi(1, int(GameState.grid.get(cell, {}).get("level", 1)))
+
+	func interact_radius() -> float:
+		return 46.0
+
+	func can_interact(_by: Node) -> bool:
+		return _level() < Village.MAX_BUILD_LEVEL
+
+	func interact_prompt() -> String:
+		var lv: int = _level()
+		var label: String = Loc.t(String(Village.BUILDINGS.get(build_id, {}).get("label", build_id)))
+		var cost: Dictionary = village._upgrade_cost(build_id, lv)
+		return Loc.t("Upgrade %s  Lv %d→%d  (%s)  [E]") % [label, lv, lv + 1, village._cost_str(cost)]
+
+	func do_interact(_by: Node) -> void:
+		if village != null and is_instance_valid(village):
+			village._upgrade_building(cell, build_id)
 
 # A soil plot atop a finished Crop Bed: plant a seed, wait through 4 stages, harvest.
 class CropPlot extends Node2D:

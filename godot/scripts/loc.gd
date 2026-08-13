@@ -185,6 +185,10 @@ const VI := {
 	"Colorblind cues": "Màu cho người mù màu", "On": "Bật", "Off": "Tắt",
 	"Language": "Ngôn ngữ", "Back": "Quay lại",
 
+	# --- Building upgrades (VILLAGE_DESIGN P2) ---
+	"Upgrade %s  Lv %d→%d  (%s)  [E]": "Nâng cấp %s  Cấp %d→%d  (%s)  [E]",
+	"%s upgraded to Lv %d!": "%s đã nâng lên Cấp %d!",
+
 	# --- Named survivors (CRITIQUE A2) ---
 	"Free %s the %s  [E]": "Giải cứu %s — %s  [E]",
 	"%s the %s joins you": "%s — %s gia nhập cùng ngươi",

@@ -846,11 +846,12 @@ func apply_buff(kind: String, announce: bool = false) -> void:
 # The village you rebuilt strengthens the descent (QA D-02): the Forge sharpens the
 # claws (Metallurgy), Cabins harden the body (Shelter), the Crop Beds send you down
 # with Provisions (Agriculture). Applied once per fresh run by Main, on top of the
-# reset baseline + rescue attunements. Each is capped, so a *diverse* village beats
-# spamming one building — which also dissolves the cabin-spam dominant strategy (F-13).
+# reset baseline + rescue attunements. `forges`/`cabins` are now total building LEVELS
+# (VILLAGE_DESIGN P2), capped at 6 so upgrading pays off without running away; the
+# diverse-village incentive still holds via the diminishing warmth on duplicates (F-13).
 func apply_village(forges: int, cabins: int, crop_beds: int) -> void:
-	var f: int = mini(forges, 3)
-	var c: int = mini(cabins, 3)
+	var f: int = mini(forges, 6)
+	var c: int = mini(cabins, 6)
 	damage_mult += 0.08 * float(f)
 	max_hp += c
 	hp = max_hp

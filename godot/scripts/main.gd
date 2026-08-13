@@ -435,17 +435,19 @@ func _buff_for_pillar(pillar: String) -> String:
 func _apply_village_boons() -> void:
 	if not is_instance_valid(_player) or not _player.has_method("apply_village"):
 		return
-	var forges: int = GameState.building_count("forge")
-	var cabins: int = GameState.building_count("cabin")
-	var crops: int = GameState.building_count("crop_bed")
+	# Count LEVELS, not buildings (VILLAGE_DESIGN P2/V6): an upgraded Forge/Cabin deepens
+	# the boon, so construction keeps paying off past the old 3-building ceiling.
+	var forges: int = GameState.building_level_sum("forge")
+	var cabins: int = GameState.building_level_sum("cabin")
+	var crops: int = GameState.building_level_sum("crop_bed")
 	_player.apply_village(forges, cabins, crops)
 	if forges + cabins + crops <= 0 or _hud == null:
 		return
 	var parts: Array[String] = []
 	if forges > 0:
-		parts.append(Loc.t("Metallurgy +%d%% dmg") % int(round(0.08 * float(mini(forges, 3)) * 100.0)))
+		parts.append(Loc.t("Metallurgy +%d%% dmg") % int(round(0.08 * float(mini(forges, 6)) * 100.0)))
 	if cabins > 0:
-		parts.append(Loc.t("Shelter +%d HP") % mini(cabins, 3))
+		parts.append(Loc.t("Shelter +%d HP") % mini(cabins, 6))
 	if crops > 0:
 		parts.append(Loc.t("%d Provisions") % mini(crops, 3))
 	if _hud.has_method("toast"):

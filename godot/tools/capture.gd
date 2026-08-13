@@ -33,6 +33,15 @@ func _process(_delta: float) -> void:
 			await _shot("01_village_cold")
 		24:
 			_warm_and_build()
+		26:
+			# Building upgrades (VILLAGE_DESIGN P2): raise the cabin to Lv3 so it stands
+			# visibly taller than the Lv1 forge beside it.
+			GameState.add_resource("wood", 40)
+			GameState.add_resource("stone", 30)
+			var lyr_up := _layer()
+			if lyr_up != null and lyr_up.has_method("_upgrade_building"):
+				lyr_up.call("_upgrade_building", Vector2i(3, 3), "cabin")
+				lyr_up.call("_upgrade_building", Vector2i(3, 3), "cabin")
 		30:
 			_prompt("Hammer  [E]  (34%)")
 		38:
@@ -43,6 +52,8 @@ func _process(_delta: float) -> void:
 			_hud().call("toggle_codex")     # close it
 		50:
 			await _shot("02_village_warm")
+		52:
+			await _shot("23_upgrade")   # the Lv3 cabin, grown a tier (VILLAGE_DESIGN P2)
 		56:
 			_open_menu()
 		64:

@@ -201,6 +201,17 @@ func building_count(build_type: String) -> int:
 			n += 1
 	return n
 
+# Total LEVELS of a built building type (VILLAGE_DESIGN P2/V6): a Lv3 forge counts as
+# three, so UPGRADING a building deepens its run-boon — construction keeps mattering
+# past the old 3-building ceiling. A building with no recorded level counts as 1.
+func building_level_sum(build_type: String) -> int:
+	var n: int = 0
+	for key in grid.keys():
+		var d: Dictionary = grid[key]
+		if bool(d.get("built", false)) and String(d.get("type", "")) == build_type:
+			n += maxi(1, int(d.get("level", 1)))
+	return n
+
 # --- Run satchel (unbanked loot) + run summary ------------------------------
 
 # Start-of-descent reset: empty the satchel and open a fresh tally.
