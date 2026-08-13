@@ -132,6 +132,10 @@ const VI := {
 		"Rèn sắt thành đao. Đòn đánh sắc hơn (+Sát thương) khi xuống hang.",
 	"Tilled soil to grow food — seeds become Provisions that heal mid-run.":
 		"Đất đã cày để trồng lương — hạt giống thành Khẩu phần hồi máu giữa chừng.",
+	"Workshop": "Xưởng Mộc",
+	"The Carpenter's craft. Sharpens your eye (+Crit) below, and speeds every build.":
+		"Nghề của Thợ Mộc. Mắt ngươi tinh hơn (+Chí mạng) khi xuống hang, và xây nhanh hơn.",
+	"Carpentry +%d%% crit": "Nghề mộc +%d%% chí mạng",
 	"Tend one more ring of wild land so you can build farther out.":
 		"Khai hoang thêm một vòng đất hoang để xây rộng ra ngoài.",
 	"Placing %s — left-click a tended tile to build   ·   Esc to cancel":

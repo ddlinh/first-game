@@ -849,13 +849,15 @@ func apply_buff(kind: String, announce: bool = false) -> void:
 # reset baseline + rescue attunements. `forges`/`cabins` are now total building LEVELS
 # (VILLAGE_DESIGN P2), capped at 6 so upgrading pays off without running away; the
 # diverse-village incentive still holds via the diminishing warmth on duplicates (F-13).
-func apply_village(forges: int, cabins: int, crop_beds: int) -> void:
+func apply_village(forges: int, cabins: int, crop_beds: int, workshops: int = 0) -> void:
 	var f: int = mini(forges, 6)
 	var c: int = mini(cabins, 6)
+	var w: int = mini(workshops, 6)
 	damage_mult += 0.08 * float(f)
 	max_hp += c
 	hp = max_hp
 	provisions = mini(crop_beds, 3)
+	crit_chance = minf(0.9, crit_chance + 0.03 * float(w))   # the Workshop sharpens the eye (P3)
 	hp_changed.emit(hp, max_hp)
 
 # ---------------------------------------------------------------------------

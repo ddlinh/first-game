@@ -440,8 +440,9 @@ func _apply_village_boons() -> void:
 	var forges: int = GameState.building_level_sum("forge")
 	var cabins: int = GameState.building_level_sum("cabin")
 	var crops: int = GameState.building_level_sum("crop_bed")
-	_player.apply_village(forges, cabins, crops)
-	if forges + cabins + crops <= 0 or _hud == null:
+	var shops: int = GameState.building_level_sum("workshop")
+	_player.apply_village(forges, cabins, crops, shops)
+	if forges + cabins + crops + shops <= 0 or _hud == null:
 		return
 	var parts: Array[String] = []
 	if forges > 0:
@@ -450,6 +451,8 @@ func _apply_village_boons() -> void:
 		parts.append(Loc.t("Shelter +%d HP") % mini(cabins, 6))
 	if crops > 0:
 		parts.append(Loc.t("%d Provisions") % mini(crops, 3))
+	if shops > 0:
+		parts.append(Loc.t("Carpentry +%d%% crit") % int(round(0.03 * float(mini(shops, 6)) * 100.0)))
 	if _hud.has_method("toast"):
 		_hud.toast(Loc.t("The village provides:  ") + "   ·   ".join(parts), Palette.MOSS_L)
 

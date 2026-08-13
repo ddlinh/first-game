@@ -28,6 +28,8 @@ const BUILDINGS := {
 		"desc": "Work iron into blades. Sharpens your strikes (+Damage) below."},
 	"crop_bed": {"label": "Crop Bed", "cost": {"wood": 3}, "tex": "building_crop_bed", "gwi": 0.05,
 		"desc": "Tilled soil to grow food — seeds become Provisions that heal mid-run."},
+	"workshop": {"label": "Workshop", "cost": {"wood": 6, "stone": 3}, "tex": "building_workshop", "gwi": 0.14,
+		"desc": "The Carpenter's craft. Sharpens your eye (+Crit) below, and speeds every build."},
 }
 
 # The farm the Farmer establishes (VILLAGE_DESIGN P1). It is NOT a free build: rescuing
@@ -41,7 +43,7 @@ const FARM_IRRIGATE := {"stone": 8, "wood": 4}    # the Farmer's follow-up proje
 # and warmth, and the structure visibly grows. Only the two combat buildings upgrade
 # this way; the farm has its own Farmer-driven progression.
 const MAX_BUILD_LEVEL := 3
-const UPGRADABLE := {"cabin": true, "forge": true}
+const UPGRADABLE := {"cabin": true, "forge": true, "workshop": true}
 
 # One quest per rescued pillar. `res` is the resource threshold to reach; on turn-in
 # the pillar rewards warmth (GWI) plus materials. Keeps the village loop purposeful.
@@ -568,9 +570,13 @@ func _add_building_sprite(cell: Vector2i, build_id: String) -> void:
 		var lc: PointLight2D = Iso.light(root, Palette.GOLD_L, 74.0, 0.5)
 		lc.position = Vector2(0.0, -20.0)
 		_bldg_puff(root, Vector2(9.0, -44.0), Palette.SHADOW.lightened(0.4), 1.3, 2.6)  # chimney smoke
+	elif build_id == "workshop":
+		var lw: PointLight2D = Iso.light(root, Palette.GOLD_L, 70.0, 0.45)
+		lw.position = Vector2(0.0, -14.0)
+		_bldg_puff(root, Vector2(-14.0, -6.0), Palette.WOOD.lightened(0.2), 1.6, 3.4)   # drifting sawdust
 	# Solid buildings get a footprint collider so the hero can't walk through them.
 	# Crop beds stay flat ground you can stand on to plant/harvest.
-	if build_id == "cabin" or build_id == "forge":
+	if build_id == "cabin" or build_id == "forge" or build_id == "workshop":
 		var body := StaticBody2D.new()
 		body.position = cell_to_world(cell) + Vector2(0.0, 8.0)
 		var cs := CollisionShape2D.new()
@@ -611,6 +617,12 @@ func _cost_str(cost: Dictionary) -> String:
 	for k in cost:
 		parts.append("%d %s" % [int(cost[k]), Loc.t(String(k))])
 	return ", ".join(parts)
+
+# How fast scaffolds rise — the Workshop speeds every build (VILLAGE_DESIGN P3): each
+# workshop level adds 12% construction speed (to both hand-hammering and the Builder's
+# auto-raise), capped so a fully-kitted village isn't instant.
+func build_speed() -> float:
+	return 1.0 + 0.12 * float(mini(GameState.building_level_sum("workshop"), 5))
 
 # Spend the escalating cost to raise a building a tier: deepen its boon (via the stored
 # level), grow the sprite, warm the world a notch, and celebrate (VILLAGE_DESIGN P2/V6).
@@ -739,6 +751,10 @@ func _open_build_menu() -> void:
 		# Crop Beds require the Farmer's knowledge — you can only expand the farm once
 		# he's established it (VILLAGE_DESIGN P1). Before that, farming isn't buildable.
 		if id == "crop_bed" and not (GameState.farm_state == "active" or GameState.farm_state == "irrigated"):
+			continue
+		# The Workshop needs the Carpenter (VILLAGE_DESIGN P3): rescue the Builder first —
+		# knowledge carried by people, the same gate the farm uses.
+		if id == "workshop" and not GameState.has_rescued("builder"):
 			continue
 		var info: Dictionary = BUILDINGS[id]
 		var cost: Dictionary = info["cost"]
@@ -958,7 +974,7 @@ class Scaffold extends Node2D:
 	func do_interact(_by: Node) -> void:
 		if _done:
 			return
-		progress += 0.34
+		progress += 0.34 * (village.build_speed() if village != null else 1.0)   # Workshop speeds it (P3)
 		# Make the hero visibly swing the hammer toward the frame.
 		if _by is Node2D and _by.has_method("play_work"):
 			_by.call("play_work", global_position - (_by as Node2D).global_position)
@@ -978,7 +994,7 @@ class Scaffold extends Node2D:
 		if _done:
 			return
 		if GameState.has_rescued("builder"):
-			progress += delta * 0.5
+			progress += delta * 0.5 * (village.build_speed() if village != null else 1.0)
 			if progress >= 1.0:
 				_complete()
 

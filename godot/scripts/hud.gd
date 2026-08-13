@@ -1773,11 +1773,23 @@ func open_build_menu(entries: Array) -> void:
 	_menu_ids.clear()
 	for c in _menu.get_children():
 		c.queue_free()
+	var outer := VBoxContainer.new()
+	outer.add_theme_constant_override("separation", 8)
+	_ignore(outer)
+	_menu.add_child(outer)
+	outer.add_child(_make_label("BUILD   (Esc to cancel)", 20, Palette.EMBER))
+	# The cards live in a height-capped scroll box, so any number of building types
+	# (they unlock over the game) fits without overrunning the screen.
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.custom_minimum_size = Vector2(376, mini(entries.size() * 136, 544))
+	_ignore(scroll)
+	outer.add_child(scroll)
 	var vb := VBoxContainer.new()
 	vb.add_theme_constant_override("separation", 8)
+	vb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_ignore(vb)
-	_menu.add_child(vb)
-	vb.add_child(_make_label("BUILD   (Esc to cancel)", 20, Palette.EMBER))
+	scroll.add_child(vb)
 	var n := 1
 	for e in entries:
 		var id: String = str(e["id"])
@@ -2436,6 +2448,8 @@ func _input(event: InputEvent) -> void:
 			KEY_2: idx = 1
 			KEY_3: idx = 2
 			KEY_4: idx = 3
+			KEY_5: idx = 4
+			KEY_6: idx = 5
 		if idx >= 0 and idx < _menu_ids.size():
 			_select(_menu_ids[idx])
 			get_viewport().set_input_as_handled()

@@ -53,6 +53,7 @@ static func bake(a: Node) -> void:
 	a.put("building_cabin", _cabin())
 	a.put("building_forge", _forge())
 	a.put("building_crop_bed", _crop_bed())
+	a.put("building_workshop", _workshop())
 	a.put("building_scaffold", _scaffold())
 	for i in range(4):
 		a.put("crop_%d" % i, _crop(i))
@@ -777,6 +778,76 @@ static func _forge() -> Image:
 	Art.paint(im, anvil, iron, Palette.OUTLINE, 3.5, 0.24, [], 0.7, Palette.GOLD_L)
 	Art.shade(im, [Art.s(125, 152.5, 148, 152.5, 1.2)], Palette.GOLD_L, 0.6, anvil, 1.4)
 	Art.shade(im, [Art.s(126, 158, 126, 166, 1.4)], Palette.TORCH, 0.4, anvil, 2.0)
+	return im
+
+
+## The Carpenter's Workshop: an open-front timber shed with a single-slope roof — a
+## silhouette that reads apart from the cabin's peak and the forge's flat stone box.
+## A workbench with a standing saw sits in the open front; fresh planks stack beside it.
+static func _workshop() -> Image:
+	var im := Art.img(160, 180)
+	_ground(im, 82.0, 178.0, 124.0)
+	var back := _recede(48.0)
+
+	# Left return face (lit, receding) — the timber side wall.
+	var ret := Art.quad(Vector2(40, 100), Vector2(40, 172),
+		Vector2(40, 172) + back * 0.72, Vector2(40, 92) + back * 0.72)
+	Art.paint(im, ret, Palette.WOOD2.lightened(0.18), Palette.OUTLINE, B_OW, B_GRAD, [],
+		B_RIM, Palette.GOLD_L)
+
+	# Dim interior back wall, seen through the open front.
+	var inner := [Art.rr(90, 150, 44, 28, 3)]
+	Art.paint(im, inner, Palette.WOOD2_D.darkened(0.12), Palette.OUTLINE, B_OW, 0.14)
+	Art.shade(im, inner, Palette.INK, 0.34, inner, 6.0)
+	for i in range(3):
+		var wy: float = 130.0 + float(i) * 13.0
+		Art.shade(im, [Art.s(48, wy, 132, wy, 0.9)], Palette.INK, 0.4, inner, 1.2)
+
+	# Two front posts carrying the roof's front edge.
+	var post_l := [Art.rr(48, 136, 4, 42, 2)]
+	var post_r := [Art.rr(128, 136, 4, 42, 2)]
+	Art.paint(im, post_l, Palette.WOOD_D, Palette.OUTLINE, B_OW_IN, 0.2, [], 0.4, Palette.GOLD_L)
+	Art.paint(im, post_r, Palette.WOOD_D, Palette.OUTLINE, B_OW_IN, 0.2, [], 0.4, Palette.GOLD_L)
+
+	# Workbench with a plank clamped and a saw standing in the cut.
+	var bench := [Art.rr(88, 152, 30, 5, 2), Art.rr(66, 162, 3, 14, 1), Art.rr(110, 162, 3, 14, 1)]
+	Art.paint(im, bench, Palette.WOOD2, Palette.OUTLINE, B_OW_IN, 0.2, [], 0.5, Palette.GOLD_L)
+	Art.shade(im, [Art.s(60, 150, 116, 150, 1.0)], Palette.GOLD_L, 0.4, bench, 1.3)
+	Art.paint(im, [Art.rr(88, 147, 26, 3, 1)], Palette.WOOD, Palette.OUTLINE, B_OW_IN, 0.16)
+	var blade := [Art.t(80, 147, 94, 147, 87, 122)]
+	Art.paint(im, blade, Palette.STEEL, Palette.OUTLINE, B_OW_IN, 0.14, [], 0.7, Palette.GOLD_L)
+	Art.shade(im, [Art.s(82, 145, 87, 124, 1.0)], Palette.GOLD_L, 0.5, blade, 1.2)
+	Art.paint(im, [Art.rr(87, 120, 5, 6, 2)], Palette.WOOD_D, Palette.OUTLINE, B_OW_IN, 0.2)
+
+	# The mono-pitch roof: a single slab sloping down toward the viewer (higher, receded
+	# at the back), drawn over the posts. Plank courses run down the slope.
+	var fl := Vector2(30, 102)
+	var fr := Vector2(130, 102)
+	var bl := Vector2(38, 94) + back
+	var br := Vector2(122, 94) + back
+	var roof := Art.quad(fl, fr, br, bl)   # quad already returns an Array of prims
+	Art.paint(im, roof, Palette.WOOD.lightened(0.16), Palette.OUTLINE, B_OW, B_GRAD, [],
+		0.55, Palette.GOLD_L)
+	for i in range(1, 6):
+		var t: float = float(i) / 6.0
+		Art.shade(im, [Art.s(lerpf(30.0, 130.0, t), 102.0,
+			lerpf(38.0, 122.0, t) + back.x, 94.0 + back.y, 1.0)], Palette.WOOD_D, 0.4, roof, 1.2)
+	var eave := [Art.rr(80, 102, 52, 3, 2)]
+	Art.paint(im, eave, Palette.WOOD_D, Palette.OUTLINE, B_OW_IN, 0.1)
+	Art.shade(im, [Art.s(30, 100, 130, 100, 1.2)], Palette.GOLD_L, 0.34, eave, 1.4)
+
+	# A stack of fresh planks on the ground, left of the shed.
+	Art.shade(im, [Art.e(24, 176, 20, 6)], Palette.INK, 0.4, [], 4.0)
+	for i in range(4):
+		var py: float = 172.0 - float(i) * 5.0
+		var lit: Color = Palette.WOOD2 if i % 2 == 0 else Palette.WOOD
+		Art.paint(im, [Art.rr(24, py, 16, 3, 1)], lit, Palette.OUTLINE, B_OW_IN, 0.16, [],
+			0.4, Palette.GOLD_L)
+	# sawdust specks scattered in the front
+	for i in range(6):
+		var k: int = 917 + i * 7
+		Art.dot(im, 62.0 + Art.hash01(k) * 60.0, 170.0 + Art.hash01(k + 1) * 8.0, 1.4, 1.0,
+			Palette.WOOD.lightened(0.22))
 	return im
 
 

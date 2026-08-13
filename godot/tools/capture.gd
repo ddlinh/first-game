@@ -55,6 +55,7 @@ func _process(_delta: float) -> void:
 		52:
 			await _shot("23_upgrade")   # the Lv3 cabin, grown a tier (VILLAGE_DESIGN P2)
 		56:
+			_hud().call("dialogue_hide")   # clear the intro line so the menu reads clean
 			_open_menu()
 		64:
 			await _shot("03_build_menu")
@@ -237,8 +238,10 @@ func _warm_and_build() -> void:
 	if layer != null and layer.has_method("finish_building"):
 		GameState.grid[Vector2i(3, 3)] = {"type": "cabin", "built": false}
 		GameState.grid[Vector2i(5, 4)] = {"type": "forge", "built": false}
+		GameState.grid[Vector2i(-3, 3)] = {"type": "workshop", "built": false}
 		layer.call("finish_building", Vector2i(3, 3), "cabin")
 		layer.call("finish_building", Vector2i(5, 4), "forge")
+		layer.call("finish_building", Vector2i(-3, 3), "workshop")
 	GameState.add_resource("wood", 9)
 	GameState.add_resource("stone", 6)
 	GameState.add_resource("iron", 3)
@@ -265,6 +268,9 @@ func _open_menu() -> void:
 		{"id": "crop_bed", "label": "Crop Bed", "cost": {"wood": 3}, "affordable": false,
 			"tex": "building_crop_bed", "warm": 0.05,
 			"desc": "Tilled soil to grow food — seeds become Provisions that heal mid-run."},
+		{"id": "workshop", "label": "Workshop", "cost": {"wood": 6, "stone": 3}, "affordable": true,
+			"tex": "building_workshop", "warm": 0.14,
+			"desc": "The Carpenter's craft. Sharpens your eye (+Crit) below, and speeds every build."},
 		{"id": "expand", "label": "Expand Clearing", "cost": {"wood": 10, "stone": 6}, "affordable": true,
 			"tex": "tile_grass", "warm": 0.0,
 			"desc": "Tend one more ring of wild land so you can build farther out."},
