@@ -8,14 +8,12 @@ signal roster_changed
 signal gwi_changed(value: float)
 # The unbanked run satchel changed (loot picked up / banked / forfeited).
 signal satchel_changed
-# Meta-progression: total Ember XP and the derived Ember Level.
-# xp_changed(total, level, xp_into_level, xp_span_of_level); ember_level_up(new_level).
-signal xp_changed(total: int, level: int, into: int, span: int)
-signal ember_level_up(new_level: int)
 # The knowledge Codex gained an entry (QA D-06): a rescue or a first-built invention.
 signal codex_changed
 # The world has fully rekindled (GWI hit 1.0) — the win state (CRITIQUE B4/A1).
 signal game_won
+# The settlement's population changed (a wanderer settled in) — the HUD updates its readout.
+signal population_changed
 # The UI language changed ("en" | "vi") — the HUD relocalises visible text.
 signal lang_changed(lang: String)
 
@@ -35,6 +33,11 @@ var run_stats: Dictionary = {}
 # Pillar ids of survivors brought home: "farmer", "smith", "builder", ...
 var rescued: Array[String] = []
 
+# Generic townsfolk drawn to the warmth, beyond the named survivors you rescue (VILLAGE_
+# DESIGN P4/P5). A fed, housed village attracts them over time; a larger population warms
+# the world and gives later descents a head-start (see soil_value).
+var settlers: int = 0
+
 # Rescue buffs reframed as natural "attunements" — a single source of truth shared
 # by the Survivor, Main (re-apply on descent), and the HUD panel. Each maps a rescued
 # pillar to the stat buff kind, a display name, a one-line effect, and its element
@@ -53,10 +56,6 @@ const SURVIVOR_NAMES := {"farmer": "Rowan", "smith": "Bex", "builder": "Malin"}
 
 func survivor_name(p: String) -> String:
 	return String(SURVIVOR_NAMES.get(p, p.capitalize()))
-
-# --- Meta-progression: Ember XP → Ember Level (persists across runs) ---
-var xp: int = 0
-var ember_level: int = 0
 
 # Village grid: Vector2i(cell) -> {"type": String, "built": bool}
 var grid: Dictionary = {}
@@ -92,6 +91,13 @@ var farm_state: String = "none"
 # Recovered-knowledge Codex (QA D-06): ids from Lore.ENTRIES the player has unlocked.
 # The framing entry is known from the start; inventions unlock as they're recovered.
 var codex: Array[String] = ["ember"]
+# Entries the player has actually READ (opened the Codex on), separate from merely unlocked.
+# Reading a new memory grants a little warmth — knowledge = warmth, the game's thesis (A6).
+var codex_read: Array[String] = []
+
+# Ruins story fragments already discovered (indices into Lore.RUINS_FRAGMENTS), so each
+# "you find…" beat is shown once ever and the descent keeps revealing new ones (A3).
+var ruins_found: Array[int] = []
 
 # UI language: "en" (English) or "vi" (Tiếng Việt). Read by Loc.t everywhere text is
 # shown; toggled with L. Persisted to a tiny standalone settings file (independent of
@@ -192,6 +198,39 @@ func unlock_codex(id: String) -> bool:
 func has_codex(id: String) -> bool:
 	return id in codex
 
+# How many unlocked entries the player hasn't opened yet (drives the "new memory" cue, A6).
+func codex_unread() -> int:
+	var n: int = 0
+	for id in codex:
+		if not (id in codex_read):
+			n += 1
+	return n
+
+# Mark every unlocked-but-unread entry as read; returns how many were newly read, so the
+# caller can grant the one-time warmth reward for actually reading them.
+func mark_codex_read() -> int:
+	var newly: int = 0
+	for id in codex:
+		if not (id in codex_read):
+			codex_read.append(id)
+			newly += 1
+	return newly
+
+# --- Ruins story fragments (CRITIQUE A3) ---
+# A random still-undiscovered fragment index, or -1 when the player has found them all.
+func next_ruins_fragment() -> int:
+	var pool: Array[int] = []
+	for i in range(Lore.RUINS_FRAGMENTS.size()):
+		if not (i in ruins_found):
+			pool.append(i)
+	if pool.is_empty():
+		return -1
+	return pool[randi() % pool.size()]
+
+func mark_ruins_found(idx: int) -> void:
+	if idx >= 0 and not (idx in ruins_found):
+		ruins_found.append(idx)
+
 # How many BUILT buildings of a type stand in the village (drives the village→run
 # boons, QA D-02). Counts the seeded starter bed too — a crop bed is a crop bed.
 func building_count(build_type: String) -> int:
@@ -213,12 +252,31 @@ func building_level_sum(build_type: String) -> int:
 			n += maxi(1, int(d.get("level", 1)))
 	return n
 
+# --- Living settlement: population & housing (VILLAGE_DESIGN P4/P5) ---
+# Everyone who lives here: the named survivors you rescued plus the settlers they drew in.
+func residents() -> int:
+	return rescued.size() + settlers
+
+# Housing capacity: the hearth shelters the founding survivors (base 3, one per pillar);
+# each Cabin LEVEL houses two more (a Lv3 cabin is a longhouse for six). Population can
+# never exceed this — so attracting settlers needs Cabins, tying housing to growth.
+func housing_cap() -> int:
+	return 3 + building_level_sum("cabin") * 2
+
+# A wanderer settles in, if there is room. Returns true only if the town actually grew.
+func add_settler() -> bool:
+	if residents() >= housing_cap():
+		return false
+	settlers += 1
+	population_changed.emit()
+	return true
+
 # --- Run satchel (unbanked loot) + run summary ------------------------------
 
 # Start-of-descent reset: empty the satchel and open a fresh tally.
 func reset_run() -> void:
 	satchel = {"wood": 0, "stone": 0, "iron": 0}
-	run_stats = {"rooms": 0, "husks": 0, "rescues": [] as Array, "xp_start": xp,
+	run_stats = {"rooms": 0, "husks": 0, "rescues": [] as Array,
 		"kindle": 0, "blooms": 0}
 	satchel_changed.emit()
 
@@ -266,39 +324,6 @@ func forfeit_satchel(keep_frac: float = 0.25) -> Dictionary:
 	satchel_changed.emit()
 	return {"kept": kept, "lost": lost}
 
-# --- Ember XP / levels -------------------------------------------------------
-# Cumulative XP required to REACH a given level. Slowed ~2.7x from the first pass
-# (QA F-29: levels were falling every ~3 kills, so "LEVEL UP!" stopped meaning
-# anything and the per-level heal deleted attrition). Increments 32, 64, 96, …
-func _cum(level: int) -> int:
-	return 16 * level * (level + 1)
-
-func level_for_xp(total: int) -> int:
-	var l: int = 0
-	while _cum(l + 1) <= total:
-		l += 1
-	return l
-
-func xp_floor(level: int) -> int:   # total XP at which `level` began
-	return _cum(level)
-
-func xp_ceil(level: int) -> int:    # total XP needed for the next level
-	return _cum(level + 1)
-
-# Award Ember XP (husk kills). Rolls up any levels crossed, firing ember_level_up
-# once per level so every threshold gets its own celebration, then reports progress.
-func add_xp(n: int) -> void:
-	if n <= 0:
-		return
-	xp += n
-	var target: int = level_for_xp(xp)
-	while ember_level < target:
-		ember_level += 1
-		ember_level_up.emit(ember_level)
-	var into: int = xp - xp_floor(ember_level)
-	var span: int = xp_ceil(ember_level) - xp_floor(ember_level)
-	xp_changed.emit(xp, ember_level, into, span)
-
 # --- Global Warmth Index ---
 func add_gwi(delta: float) -> void:
 	set_gwi(gwi + delta)
@@ -320,7 +345,7 @@ func set_gwi(v: float) -> void:
 # runs: banked warmth (GWI) and settled survivors. Read by Player.begin_run to seed
 # the starting Bloom stage, so per-run power scales with the world you've rebuilt.
 func soil_value() -> float:
-	return clampf(gwi * 0.6 + float(rescued.size()) * 0.05, 0.0, 1.0)
+	return clampf(gwi * 0.6 + float(rescued.size()) * 0.05 + float(settlers) * 0.02, 0.0, 1.0)
 
 # The succession stage a descent starts at, given current Soil (0..2). A cold, empty
 # world starts at Ash (0); a warm, populated one begins as high as Herb (2).
@@ -406,12 +431,12 @@ func has_save() -> bool:
 
 func save_game() -> void:
 	var data := {
-		"resources": resources, "rescued": rescued, "grid": grid,
+		"resources": resources, "rescued": rescued, "settlers": settlers, "grid": grid,
 		"gwi": gwi, "won": won, "run_count": run_count,
 		"village_seeded": village_seeded, "village_radius": village_radius,
 		"tutorial_seen": tutorial_seen, "combat_tutorial_seen": combat_tutorial_seen,
-		"quests": quests, "codex": codex, "farm_state": farm_state,
-		"tips_seen": tips_seen,
+		"quests": quests, "codex": codex, "codex_read": codex_read, "farm_state": farm_state,
+		"tips_seen": tips_seen, "ruins_found": ruins_found,
 	}
 	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if f != null:
@@ -432,6 +457,7 @@ func load_game() -> bool:
 	var d: Dictionary = data
 	resources = d.get("resources", resources)
 	rescued = _as_str_array(d.get("rescued", []))
+	settlers = int(d.get("settlers", 0))
 	grid = d.get("grid", {})
 	gwi = float(d.get("gwi", 0.0))
 	won = bool(d.get("won", false))
@@ -442,11 +468,14 @@ func load_game() -> bool:
 	combat_tutorial_seen = bool(d.get("combat_tutorial_seen", false))
 	quests = d.get("quests", {})
 	codex = _as_str_array(d.get("codex", ["ember"]))
+	codex_read = _as_str_array(d.get("codex_read", []))
+	ruins_found = _as_int_array(d.get("ruins_found", []))
 	farm_state = String(d.get("farm_state", "none"))
 	tips_seen = d.get("tips_seen", {})
 	# Re-announce loaded state so the HUD repaints (safe if listeners aren't wired yet).
 	resources_changed.emit()
 	roster_changed.emit()
+	population_changed.emit()
 	gwi_changed.emit(gwi)
 	return true
 
@@ -462,12 +491,21 @@ func _as_str_array(a: Variant) -> Array[String]:
 			out.append(String(x))
 	return out
 
+# Same, for the Array[int] fields (ruins_found).
+func _as_int_array(a: Variant) -> Array[int]:
+	var out: Array[int] = []
+	if a is Array:
+		for x in a:
+			out.append(int(x))
+	return out
+
 # Wipe all meta-progression back to a fresh start (New Game).
 func reset_all() -> void:
 	resources = {"wood": 6, "stone": 3, "iron": 0, "food": 0, "seeds": 3}
 	satchel = {"wood": 0, "stone": 0, "iron": 0}
 	run_stats = {}
 	rescued = [] as Array[String]
+	settlers = 0
 	grid = {}
 	gwi = 0.0
 	won = false
@@ -478,10 +516,10 @@ func reset_all() -> void:
 	combat_tutorial_seen = false
 	quests = {}
 	codex = ["ember"] as Array[String]
+	codex_read = [] as Array[String]
+	ruins_found = [] as Array[int]
 	farm_state = "none"
 	tips_seen = {}
-	xp = 0
-	ember_level = 0
 	run_map = null
 	resources_changed.emit()
 	roster_changed.emit()

@@ -74,3 +74,22 @@ static func entry(id: String) -> Dictionary:
 		if String(e.get("id", "")) == id:
 			return e
 	return {}
+
+# Environmental storytelling for the ruins (CRITIQUE A3): one-line "you find…" discoveries
+# scattered through the descent, so a chamber reads as a place people lost — wordless
+# world-building about who lived here and how the cold took them. Each is shown once ever
+# (GameState.ruins_found), drawn at random, so the ruins keep revealing themselves run to run.
+const RUINS_FRAGMENTS: Array[String] = [
+	"a child's mitten frozen to a doorstep. Whoever knocked never got an answer.",
+	"charcoal tally-marks on a wall — days without sun. They stop at forty-one.",
+	"a hearth swept clean and laid with kindling, waiting for a spark that never came.",
+	"a courier frozen mid-stride, satchel still full of letters no one will read.",
+	"a loom with the shuttle still in it, the thread snapped where a hand let go.",
+	"seed jars labelled in a careful hand, scraped empty to the last grain.",
+	"a mural of the sun, painted over and over — each layer dimmer than the last.",
+	"a ledger: pages of grain, then of firewood, then only of names.",
+	"two chairs drawn close to a cold grate. Whoever sat there stayed to the end.",
+	"a workshop of half-made tools — someone still believed in a tomorrow to finish them.",
+	"a cradle rocked to a stop, a lullaby scratched into the headboard.",
+	"boot-prints in old ash, all leading one way: toward the deep, away from the cold.",
+]

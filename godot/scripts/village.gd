@@ -45,6 +45,34 @@ const FARM_IRRIGATE := {"stone": 8, "wood": 4}    # the Farmer's follow-up proje
 const MAX_BUILD_LEVEL := 3
 const UPGRADABLE := {"cabin": true, "forge": true, "workshop": true}
 
+# Warmth radiates from the hearth and dissipates with distance (real heat transfer): a
+# structure raised close to the bonfire retains and returns more of its warmth than one
+# out in the cold. This gives PLACEMENT a real, physical decision (CRITIQUE V2 /
+# VILLAGE_DESIGN V10) — you cluster the settlement around its fire, the way cold-climate
+# builders always have. Tied straight to the game's own metallurgy-is-thermodynamics line.
+const WARMTH_NEAR := 1.0    # multiplier for a build on the hearth ring
+const WARMTH_FAR := 0.45    # multiplier at the field's cold outer edge
+# Demolition reclaims REUSABLE material, not the labour or the waste — real salvage rates
+# run well under 100%. Half the invested materials (base cost + every upgrade tier) come
+# back; the rest is lost to the teardown (CRITIQUE V1).
+const SALVAGE_FRAC := 0.5
+
+# --- Living settlement: population growth (VILLAGE_DESIGN P4/P5) ---
+# While you tend the village, a fed AND housed settlement draws wanderers in. Growth is
+# gated on HOUSING (Cabins) and FOOD (the farm), so the buildings interdepend and the town
+# only grows if you keep both up. There is deliberately no starvation/death spiral — an
+# unfed or unhoused town simply stops growing.
+const GROW_INTERVAL := 12.0   # seconds of village time between settler-arrival checks
+const GROW_FOOD_COST := 3     # food a newcomer consumes settling in
+
+# Warm one-liners a settler offers when greeted — pure flavour, no mechanics.
+const SETTLER_LINES := [
+	"I followed the light through the frost. It's warm here… I'll stay.",
+	"Give me a task and I'll earn my place by the fire.",
+	"They said the ember-bearer walks again. I had to feel the warmth myself.",
+	"A roof, a hearth, a full larder — I'd near forgotten what a home was.",
+]
+
 # One quest per rescued pillar. `res` is the resource threshold to reach; on turn-in
 # the pillar rewards warmth (GWI) plus materials. Keeps the village loop purposeful.
 const QUESTS := {
@@ -102,6 +130,26 @@ var _thaw_markers: Array = []
 # --- Build placement guide (grid + hovered-cell box, QA F-20) ---
 var _place_guide: PlaceGuide = null
 
+# --- Construction management: relocate / demolish (CRITIQUE V1/V4) ---
+const NO_CELL := Vector2i(-999, -999)
+# The cell the Build menu is currently MANAGING (upgrade / relocate / demolish).
+var _manage_cell: Vector2i = NO_CELL
+var _manage_active: bool = false
+# While relocating, the cell we are moving a finished building FROM. It stays standing
+# until the move is confirmed, so cancelling a relocate loses nothing. NO_CELL = not relocating.
+var _relocate_from: Vector2i = NO_CELL
+var _relocate_level: int = 1
+# The cell the placement ghost targets. Driven by the mouse, but also nudgeable with the
+# arrow keys so a build can be completed without a mouse (CRITIQUE V5).
+var _place_cell: Vector2i = Vector2i.ZERO
+var _place_mouse_px: Vector2 = Vector2.ZERO   # last seen mouse position, to detect movement
+# Extra nodes a finished building owns (footprint collider, manage post), so demolish and
+# relocate can tear the whole structure down cleanly. cell -> Array[Node].
+var _building_extra: Dictionary = {}
+
+# Settlement-growth timer; only advances while the village is on-screen (VILLAGE_DESIGN P4).
+var _grow_t: float = 0.0
+
 # Shared materials for the living-world effects: one wind sway (foliage) and one
 # stream flow (water), so every plant ripples in sync and the river moves.
 var _wind_mat: ShaderMaterial = null
@@ -142,10 +190,14 @@ func _ready() -> void:
 	_seed_and_rebuild()
 	_spawn_supply_gate()
 	_spawn_rescued_villagers()
+	_spawn_settlers()
 	_setup_farm()
 	# Warmth now drives the one shared grade (Main) plus visible world objects —
 	# the second full-screen overlay is gone (QA F-18/F-23).
 	_apply_warmth(GameState.gwi)
+	# The living settlement grows ONLY while you're here tending it — never off-screen and
+	# never while the game is closed. Just keep the readout current on arrival.
+	_refresh_residents()
 	Sfx.ambient(true)   # the hearth's looping crackle — the sanctuary sounds alive (B3)
 
 	# Build-menu wiring (null-guarded: Main may not have supplied a Hud).
@@ -163,6 +215,8 @@ func _ready() -> void:
 			if hud.has_method("start_village_intro"):
 				hud.call("start_village_intro")
 	GameState.gwi_changed.connect(_on_gwi_changed)
+	# Housing/population changes repaint the residents readout.
+	GameState.population_changed.connect(_refresh_residents)
 
 # Where Main drops the player: the hearth at the centre of the clearing.
 func spawn_point() -> Vector2:
@@ -358,6 +412,18 @@ func camera_bounds() -> Rect2:
 # driven here through Main (QA F-18); the visible thaw lives in _apply_warmth.
 func _on_gwi_changed(value: float) -> void:
 	_apply_warmth(value)
+	_ember_warmth_lines(value)
+
+# The Ember reacts as the world thaws (CRITIQUE A5): a one-time line each time warmth first
+# crosses a milestone, so the mentor keeps speaking instead of going silent after the intro.
+# Main.tip is one-shot per key and persisted, so each fires exactly once across the game.
+func _ember_warmth_lines(v: float) -> void:
+	if v >= 0.25:
+		Main.tip("ember_warm_25", "The frost draws back a step. You feel it too — the world exhaling.")
+	if v >= 0.5:
+		Main.tip("ember_warm_50", "Halfway to the old warmth. The world is remembering how to be alive.")
+	if v >= 0.75:
+		Main.tip("ember_warm_75", "So close now. My light strains upward, toward the surface and the sun.")
 
 # Reconstruct every structure the grid records. Farming is no longer a turn-one
 # freebie — it comes from rescuing the Farmer (see _setup_farm), so the rescue finally
@@ -384,6 +450,50 @@ func _spawn_rescued_villagers() -> void:
 		var v := Villager.new()
 		v.setup(pillar, self, Vector2(-96.0 + float(i) * 72.0, -24.0))
 		add_child(v)
+
+# --- Living settlement: population (VILLAGE_DESIGN P4/P5) --------------------
+# Re-spawn the generic settlers the town has already drawn (the persisted count), so a
+# reloaded village looks as populous as it is.
+func _spawn_settlers() -> void:
+	for i in range(GameState.settlers):
+		_add_settler_node(i)
+
+# One strolling settler: a quest-less Villager with a varied look, placed on the sunnier
+# (south) side so the newcomers read as filling in around the founding survivors.
+func _add_settler_node(index: int) -> void:
+	var skins := ["survivor_farmer", "survivor_smith", "survivor_builder"]
+	var v := Villager.new()
+	v.skin = skins[maxi(0, index) % skins.size()]
+	v.settler = true
+	var col: int = index % 4
+	var row: int = int(index / 4)
+	v.setup("settler", self, Vector2(64.0 + float(col) * 48.0, 44.0 + float(row) * 42.0))
+	add_child(v)
+
+# Ticks while the village is on-screen: a fed, housed town draws a wanderer every so often.
+func _settlement_tick(delta: float) -> void:
+	if GameState.residents() >= GameState.housing_cap():
+		return                                   # no room — nowhere for a newcomer to live
+	_grow_t += delta
+	if _grow_t < GROW_INTERVAL:
+		return
+	_grow_t = 0.0
+	if GameState.amount("food") < GROW_FOOD_COST:
+		return                                   # a hungry town attracts no one
+	GameState.spend({"food": GROW_FOOD_COST})
+	if not GameState.add_settler():
+		return
+	_add_settler_node(GameState.settlers - 1)
+	GameState.add_gwi(0.02)                       # a fuller village is a warmer one
+	Sfx.play("bloom", -6.0)
+	Vfx.embers(self, Vector2(0.0, -20.0), 16, Palette.GOLD)
+	if hud and hud.has_method("toast"):
+		hud.toast(Loc.t("A wanderer, drawn by the warmth, settles in.  (%d residents)")
+			% GameState.residents(), Palette.MOSS_L)
+
+func _refresh_residents() -> void:
+	if hud and hud.has_method("set_residents"):
+		hud.call("set_residents", GameState.residents(), GameState.housing_cap())
 
 # --- The Farmer → Farm chain (VILLAGE_DESIGN P1) ----------------------------
 # Rescuing the Farmer carries the KNOWLEDGE of agriculture home; from it he lays out
@@ -492,6 +602,8 @@ func built_count() -> int:
 # Advance the standing objective through concrete village goals so the build phase
 # has beats instead of one static line (QA F-22).
 func _update_objective() -> void:
+	# Keep the residents readout current — housing changes whenever a Cabin is built/upgraded/removed.
+	_refresh_residents()
 	if hud == null or not hud.has_method("set_objective"):
 		return
 	# The Farmer's supply quest takes priority once he's laid the fallow ground.
@@ -574,6 +686,8 @@ func _add_building_sprite(cell: Vector2i, build_id: String) -> void:
 		var lw: PointLight2D = Iso.light(root, Palette.GOLD_L, 70.0, 0.45)
 		lw.position = Vector2(0.0, -14.0)
 		_bldg_puff(root, Vector2(-14.0, -6.0), Palette.WOOD.lightened(0.2), 1.6, 3.4)   # drifting sawdust
+	# Track every node this building owns so demolish / relocate can remove it cleanly.
+	var extra: Array = []
 	# Solid buildings get a footprint collider so the hero can't walk through them.
 	# Crop beds stay flat ground you can stand on to plant/harvest.
 	if build_id == "cabin" or build_id == "forge" or build_id == "workshop":
@@ -585,19 +699,22 @@ func _add_building_sprite(cell: Vector2i, build_id: String) -> void:
 		cs.shape = rect
 		body.add_child(cs)
 		add_child(body)
+		extra.append(body)
 	# Upgrade support (VILLAGE_DESIGN P2): remember the visual root so an upgrade can
-	# grow it, scale it now to its recorded tier, and — for the two upgradable combat
-	# buildings — drop an interactable upgrade post beside it.
+	# grow it, scale it now to its recorded tier, and — for the upgradable buildings —
+	# drop an interactable manage post beside it (upgrade / relocate / demolish).
 	var level: int = maxi(1, int(GameState.grid.get(cell, {}).get("level", 1)))
 	_building_roots[cell] = root
 	root.scale = Vector2.ONE * _level_scale(level)
 	if UPGRADABLE.has(build_id):
-		var post := UpgradePost.new()
-		post.village = self
-		post.cell = cell
-		post.build_id = build_id
-		post.position = cell_to_world(cell)
-		add_child(post)
+		var mgr := BuildingManager.new()
+		mgr.village = self
+		mgr.cell = cell
+		mgr.build_id = build_id
+		mgr.position = cell_to_world(cell)
+		add_child(mgr)
+		extra.append(mgr)
+	_building_extra[cell] = extra
 
 # Visual size per tier: a Lv3 building stands notably taller than a fresh Lv1 (P2).
 func _level_scale(level: int) -> float:
@@ -623,6 +740,21 @@ func _cost_str(cost: Dictionary) -> String:
 # auto-raise), capped so a fully-kitted village isn't instant.
 func build_speed() -> float:
 	return 1.0 + 0.12 * float(mini(GameState.building_level_sum("workshop"), 5))
+
+# Warmth-retention multiplier for a cell: WARMTH_NEAR at the hearth, easing to WARMTH_FAR
+# at the cold edge of the field. Smooth, so the "warm ring" reads as a gradient, not a step.
+func _hearth_warmth_factor(cell: Vector2i) -> float:
+	var d: float = Vector2(cell - CENTER).length()
+	var t: float = clampf(d / float(FIELD), 0.0, 1.0)
+	return lerpf(WARMTH_NEAR, WARMTH_FAR, smoothstep(0.0, 1.0, t))
+
+# Warmth a fresh build of `build_id` would add if raised on `cell` right now: base warmth,
+# divided by how many of that type will then stand (diminishing duplicates, F-13), times
+# the cell's hearth-warmth factor. The honest number the placement readout shows (V2/V3).
+func _predicted_warmth(build_id: String, cell: Vector2i) -> float:
+	var base: float = float(BUILDINGS.get(build_id, {}).get("gwi", 0.0))
+	var n: int = maxi(1, GameState.building_count(build_id) + 1)
+	return base / float(n) * _hearth_warmth_factor(cell)
 
 # Spend the escalating cost to raise a building a tier: deepen its boon (via the stored
 # level), grow the sprite, warm the world a notch, and celebrate (VILLAGE_DESIGN P2/V6).
@@ -650,6 +782,105 @@ func _upgrade_building(cell: Vector2i, build_id: String) -> void:
 	Sfx.play("warm", -4.0)
 	if hud:
 		hud.toast(Loc.t("%s upgraded to Lv %d!") % [Loc.t(String(info.get("label", build_id))), lv + 1], Palette.GOLD)
+
+# ---------------------------------------------------------------------------
+# Manage an existing building: upgrade / relocate / demolish (CRITIQUE V1/V4)
+# ---------------------------------------------------------------------------
+# Opens the Build menu in MANAGE mode for the structure on `cell`. Reuses the build-card
+# UI (number-key + click selectable) with special "mng_" ids routed in _on_build_selected,
+# so a misplaced or outgrown building is no longer permanent — the way every city-builder
+# lets you bulldoze or move a structure.
+func open_manage_menu(cell: Vector2i, build_id: String) -> void:
+	if _placing or hud == null:
+		return
+	_manage_cell = cell
+	_manage_active = true
+	var info: Dictionary = BUILDINGS.get(build_id, {})
+	var tex: String = String(info.get("tex", ""))
+	var label: String = String(info.get("label", build_id))
+	var lv: int = maxi(1, int(GameState.grid.get(cell, {}).get("level", 1)))
+	var entries: Array = []
+	if UPGRADABLE.has(build_id) and lv < MAX_BUILD_LEVEL:
+		var ucost: Dictionary = _upgrade_cost(build_id, lv)
+		entries.append({
+			"id": "mng_upgrade", "label": "%s → Lv %d" % [Loc.t(label), lv + 1],
+			"cost": ucost, "affordable": GameState.can_afford(ucost), "tex": tex,
+			"desc": Loc.t("Deepen its boon and warmth; the structure grows taller."), "warm": 0.0,
+		})
+	entries.append({
+		"id": "mng_relocate", "label": "%s: %s" % [Loc.t("Relocate"), Loc.t(label)],
+		"cost": {}, "affordable": true, "tex": tex,
+		"desc": Loc.t("Pick it up and set it on a new tile — no materials lost."), "warm": 0.0,
+	})
+	var salvage: String = _cost_str(_salvage_for(cell, build_id))
+	entries.append({
+		"id": "mng_demolish", "label": "%s: %s" % [Loc.t("Demolish"), Loc.t(label)],
+		"cost": {}, "affordable": true, "tex": tex,
+		"desc": Loc.t("Salvage %s — half the materials; the rest is lost to the teardown.") \
+			% (salvage if salvage != "" else Loc.t("nothing")), "warm": 0.0,
+	})
+	hud.open_build_menu(entries, "MANAGE")
+
+# Total materials sunk into a building: base cost + every upgrade tier paid (base*L for
+# each L→L+1). Demolition salvages a fraction of this.
+func _invested(build_id: String, level: int) -> Dictionary:
+	var out: Dictionary = {}
+	var base: Dictionary = BUILDINGS.get(build_id, {}).get("cost", {})
+	for k in base:
+		out[k] = int(base[k])
+	for from_lv in range(1, level):
+		for k in base:
+			out[k] = int(out.get(k, 0)) + int(base[k]) * from_lv
+	return out
+
+# What a demolish refunds: SALVAGE_FRAC of everything invested, dropping amounts that
+# floor to zero.
+func _salvage_for(cell: Vector2i, build_id: String) -> Dictionary:
+	var lv: int = maxi(1, int(GameState.grid.get(cell, {}).get("level", 1)))
+	var inv: Dictionary = _invested(build_id, lv)
+	var out: Dictionary = {}
+	for k in inv:
+		var amt: int = int(floor(float(inv[k]) * SALVAGE_FRAC))
+		if amt > 0:
+			out[k] = amt
+	return out
+
+# Free every node a finished building owns (sprite root, collider, manage post) and clear
+# the grid cell. Shared by demolish and relocate. Warmth already banked is intentionally
+# left in place — the knowledge took root; you are reclaiming materials, not un-warming
+# the world (which would risk un-winning and confuse the meter).
+func _tear_down(cell: Vector2i) -> void:
+	if _building_roots.has(cell) and is_instance_valid(_building_roots[cell]):
+		_building_roots[cell].queue_free()
+	_building_roots.erase(cell)
+	if _building_extra.has(cell):
+		for nd in _building_extra[cell]:
+			if is_instance_valid(nd):
+				nd.queue_free()
+	_building_extra.erase(cell)
+	GameState.grid.erase(cell)
+
+func _demolish_building(cell: Vector2i, build_id: String) -> void:
+	var refund: Dictionary = _salvage_for(cell, build_id)
+	_tear_down(cell)
+	for k in refund:
+		GameState.add_resource(String(k), int(refund[k]))
+	Vfx.dust(self, cell_to_world(cell), 12)
+	Sfx.play("build", -4.0, 0.7)
+	if hud:
+		var got: String = _cost_str(refund)
+		hud.toast(Loc.t("%s demolished — salvaged %s") \
+			% [Loc.t(String(BUILDINGS.get(build_id, {}).get("label", build_id))),
+			   got if got != "" else Loc.t("nothing")], Palette.AMBER)
+	_update_objective()
+
+# Begin relocating a finished building. The original stays standing until the move is
+# confirmed (so cancelling loses nothing); on confirm we tear the old one down and raise
+# the same building — at its current tier, for free — on the new cell (see _try_place).
+func _start_relocate(cell: Vector2i, build_id: String) -> void:
+	_relocate_from = cell
+	_relocate_level = maxi(1, int(GameState.grid.get(cell, {}).get("level", 1)))
+	_enter_placement(build_id)
 
 # A repeating puff of smoke/sparks from a finished building, re-arming itself so the
 # chimney keeps breathing (cabin) and the forge keeps sparking — the little signs of
@@ -689,8 +920,15 @@ func finish_building(cell: Vector2i, build_id: String) -> void:
 	# DIVERSE village warms faster than spamming one kind (QA F-13 — retires the
 	# cabin-spam dominant strategy). building_count now includes this one, so it is N.
 	var n: int = maxi(1, GameState.building_count(build_id))
-	GameState.add_gwi(float(info.get("gwi", 0.0)) / float(n))
+	# Diminishing per duplicate (a diverse village warms faster, F-13) AND scaled by how
+	# close to the hearth it stands (heat retention, CRITIQUE V2). Grant — and SHOW — the
+	# actual warmth, not the base; the card's flat headline was misleading before (V3).
+	var gained: float = float(info.get("gwi", 0.0)) / float(n) * _hearth_warmth_factor(cell)
+	GameState.add_gwi(gained)
 	Vfx.embers(self, cell_to_world(cell), 22, Palette.GOLD)
+	if gained > 0.0:
+		Vfx.float_text(self, cell_to_world(cell) + Vector2(0.0, -32.0),
+			"+%d%% warmth" % int(round(gained * 100.0)), Palette.AMBER)
 	Sfx.play("warm", -5.0)
 	if hud:
 		hud.toast(Loc.t("%s raised!") % Loc.t(String(info.get("label", build_id))), Palette.GOLD)
@@ -710,6 +948,9 @@ func finish_building(cell: Vector2i, build_id: String) -> void:
 
 	if build_id == "crop_bed":
 		_spawn_crop_plot(cell)
+	# The Ember marks the first roof raised since the cold (CRITIQUE A5) — one-time.
+	if built_count() == 1:
+		Main.tip("ember_first_build", "One roof raised against the dark. The cold has somewhere to lose to now.")
 	_update_objective()
 
 # ---------------------------------------------------------------------------
@@ -719,32 +960,74 @@ func finish_building(cell: Vector2i, build_id: String) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("build_menu"):
 		_open_build_menu()
-	elif event.is_action_pressed("cancel"):
+		return
+	if event.is_action_pressed("cancel"):
 		# (When the Hud menu is open the Hud consumes cancel itself.)
 		if _placing:
 			_exit_placement()
-	elif event.is_action_pressed("attack"):
+		return
+	if event.is_action_pressed("attack"):
 		if _placing:
 			_try_place()
 			get_viewport().set_input_as_handled()
+		return
+	# Keyboard placement (CRITIQUE V5): while a ghost is up, the arrow keys nudge it and
+	# Enter confirms, so a build can be completed with no mouse. The mouse still works.
+	if _placing and event is InputEventKey and event.pressed and not event.echo:
+		var nudged := true
+		match event.physical_keycode:
+			KEY_LEFT:  _place_cell += Vector2i(-1, 0)
+			KEY_RIGHT: _place_cell += Vector2i(1, 0)
+			KEY_UP:    _place_cell += Vector2i(0, -1)
+			KEY_DOWN:  _place_cell += Vector2i(0, 1)
+			KEY_ENTER, KEY_KP_ENTER:
+				_try_place()
+				nudged = false
+			_:
+				nudged = false
+		if nudged:
+			var r: int = GameState.village_radius
+			_place_cell.x = clampi(_place_cell.x, CENTER.x - r, CENTER.x + r)
+			_place_cell.y = clampi(_place_cell.y, CENTER.y - r, CENTER.y + r)
+			_place_mouse_px = get_global_mouse_position()   # don't let the mouse stomp the nudge
+			get_viewport().set_input_as_handled()
 
-func _process(_delta: float) -> void:
-	# Ghost preview tracks the cursor, snapped to a grid cell; tinted red when blocked.
-	if _placing and _ghost:
-		var cell: Vector2i = world_to_cell(to_local(get_global_mouse_position()))
-		_ghost.position = cell_to_world(cell)
-		var ok: bool = _cell_free(cell)
-		_ghost.modulate = Color(1.0, 1.0, 1.0, 0.55) if ok else Color(1.0, 0.35, 0.3, 0.55)
-		# The build grid + hovered-cell box so placement has a visible target (QA F-20).
-		if _place_guide != null and is_instance_valid(_place_guide):
-			_place_guide.hover = cell
-			_place_guide.valid = ok
-			_place_guide.queue_redraw()
+func _process(delta: float) -> void:
+	# The settlement grows over time while you tend it (VILLAGE_DESIGN P4).
+	_settlement_tick(delta)
+	# Ghost preview tracks the cursor (or the arrow-key cursor), snapped to a grid cell.
+	if not (_placing and _ghost):
+		return
+	# Only take the mouse when it has actually moved, so a keyboard nudge isn't stomped.
+	var mpx: Vector2 = get_global_mouse_position()
+	if mpx.distance_to(_place_mouse_px) > 1.0:
+		_place_mouse_px = mpx
+		_place_cell = world_to_cell(to_local(mpx))
+	var cell: Vector2i = _place_cell
+	_ghost.position = cell_to_world(cell)
+	var ok: bool = _cell_free(cell)
+	_ghost.modulate = Color(1.0, 1.0, 1.0, 0.55) if ok else Color(1.0, 0.35, 0.3, 0.55)
+	# The build grid + hovered-cell box so placement has a visible target (QA F-20).
+	if _place_guide != null and is_instance_valid(_place_guide):
+		_place_guide.hover = cell
+		_place_guide.valid = ok
+		_place_guide.queue_redraw()
+	# Live, honest warmth readout for THIS tile (CRITIQUE V2/V3): a build warms the world
+	# more the closer it stands to the hearth.
+	if hud and hud.has_method("place_hint"):
+		if _relocate_from != NO_CELL:
+			hud.call("place_hint", Loc.t("Relocating — pick a tended tile   ·   Esc to cancel"))
+		elif ok:
+			var w: float = _predicted_warmth(_place_id, cell)
+			hud.call("place_hint", Loc.t("Warmth here: +%d%%   ·   closer to the hearth is warmer   ·   Esc to cancel") % int(round(w * 100.0)))
+		else:
+			hud.call("place_hint", Loc.t("Blocked tile — pick a bright, empty one   ·   Esc to cancel"))
 
 func _open_build_menu() -> void:
 	if _placing or hud == null:
 		return
-	Main.tip("build", "Pick a building, then left-click a tended (bright) tile to drop its frame. 'Expand Clearing' tends more land to build on.")
+	_manage_active = false   # a fresh Build menu is never a manage menu
+	Main.tip("build", "Pick a building, then place it on a tended (bright) tile. The closer to the hearth, the more warmth it gives. 'Expand Clearing' tends more land.")
 	var entries: Array = []
 	for key in BUILDINGS.keys():
 		var id: String = key
@@ -787,6 +1070,18 @@ func _expand_cost() -> Dictionary:
 	return {"wood": 4 + r * 3, "stone": 2 + r * 2}
 
 func _on_build_selected(id: String) -> void:
+	# MANAGE-mode actions (upgrade / relocate / demolish) route to the managed cell.
+	if _manage_active:
+		var cell: Vector2i = _manage_cell
+		var bid: String = String(GameState.grid.get(cell, {}).get("type", ""))
+		_manage_active = false
+		if bid == "":
+			return
+		match id:
+			"mng_upgrade":  _upgrade_building(cell, bid)
+			"mng_relocate": _start_relocate(cell, bid)
+			"mng_demolish": _demolish_building(cell, bid)
+		return
 	if id == "expand":
 		_expand()
 	else:
@@ -814,7 +1109,8 @@ func _expand() -> void:
 	Main.tip("expand", "The clearing grew. Keep expanding to reclaim the wild and raise a real settlement.")
 
 func _on_build_cancelled() -> void:
-	# Menu closed without a pick: nothing to place, ensure ghost is gone.
+	# Menu closed without a pick: leave manage mode and ensure any ghost is gone.
+	_manage_active = false
 	_exit_placement()
 
 func _enter_placement(id: String) -> void:
@@ -833,10 +1129,15 @@ func _enter_placement(id: String) -> void:
 	_ghost.scale = Vector2(Palette.PX, Palette.PX)
 	_ghost.modulate = Color(1.0, 1.0, 1.0, 0.55)
 	_ghost.visible = true
+	# Start the ghost where the mouse is (or fall back to the player's cell), and re-arm
+	# mouse tracking so the first mouse move takes over from any prior keyboard cursor.
+	_place_mouse_px = get_global_mouse_position()
+	_place_cell = world_to_cell(to_local(_place_mouse_px))
 	# A persistent placement banner (like a city-builder's "placing X" prompt) so the
 	# player always knows what they're dropping and how to confirm/cancel.
 	if hud and hud.has_method("show_place_banner"):
-		hud.call("show_place_banner", String(info["label"]), info["cost"])
+		var mode: String = "relocate" if _relocate_from != NO_CELL else "build"
+		hud.call("show_place_banner", String(info["label"]), info["cost"], mode)
 	# Raise the buildable-cell grid guide for the duration of placement.
 	if _place_guide == null or not is_instance_valid(_place_guide):
 		_place_guide = PlaceGuide.new()
@@ -848,6 +1149,8 @@ func _enter_placement(id: String) -> void:
 func _exit_placement() -> void:
 	_placing = false
 	_place_id = ""
+	_relocate_from = NO_CELL
+	_relocate_level = 1
 	if _ghost:
 		_ghost.visible = false
 	if hud and hud.has_method("hide_place_banner"):
@@ -856,13 +1159,30 @@ func _exit_placement() -> void:
 		_place_guide.queue_free()
 		_place_guide = null
 
-# Commit a placement on left-click, if the cell is free and affordable.
+# Commit a placement on left-click / Enter, if the cell is free (and, for a new build,
+# affordable). A relocate carries a finished building over for free instead.
 func _try_place() -> void:
 	if not _placing:
 		return
-	var cell: Vector2i = world_to_cell(to_local(get_global_mouse_position()))
+	var cell: Vector2i = _place_cell
 	if not _cell_free(cell):
-		return  # click empty in-bounds cells only; keep placing otherwise
+		return  # only land on empty in-bounds cells; keep placing otherwise
+	# Relocating a finished building: no cost, carry its tier, tear down the original now
+	# that a valid destination is confirmed (cancelling earlier would have kept it).
+	if _relocate_from != NO_CELL:
+		var bid: String = _place_id
+		var lvl: int = _relocate_level
+		var from: Vector2i = _relocate_from
+		_exit_placement()
+		_tear_down(from)
+		GameState.grid[cell] = {"type": bid, "built": true, "level": lvl}
+		_add_building_sprite(cell, bid)
+		Vfx.embers(self, cell_to_world(cell), 14, Palette.GOLD)
+		Sfx.play("build", -5.0)
+		if hud:
+			hud.toast(Loc.t("%s relocated") % Loc.t(String(BUILDINGS.get(bid, {}).get("label", bid))), Palette.MOSS_L)
+		_update_objective()
+		return
 	var info: Dictionary = BUILDINGS[_place_id]
 	var cost: Dictionary = info["cost"]
 	if not GameState.can_afford(cost):
@@ -879,9 +1199,11 @@ func _try_place() -> void:
 # Inner classes (used only by the Village)
 # ===========================================================================
 
-# A floor overlay drawn during build placement: faint outlines on every buildable
-# cell + a bold box on the hovered cell (gold = valid, red = blocked) so the player
-# can see exactly where a building will land and how far the clearing reaches (F-20).
+# A floor overlay drawn during build placement: every buildable cell is FILLED with a
+# gold wash whose strength tracks that tile's hearth-warmth (a city-builder desirability
+# overlay, CRITIQUE V2 — bright ring near the fire, faint at the cold edge), plus a bold
+# box on the hovered cell (gold = valid, red = blocked) so the player sees exactly where
+# a building lands and how far the clearing reaches (F-20).
 class PlaceGuide extends Node2D:
 	var village: Village = null
 	var hover: Vector2i = Vector2i.ZERO
@@ -897,12 +1219,18 @@ class PlaceGuide extends Node2D:
 		var half := Vector2(C, C) * 0.5
 		var r: int = GameState.village_radius
 		var gold := Palette.GOLD_L
+		var span: float = maxf(0.0001, Village.WARMTH_NEAR - Village.WARMTH_FAR)
 		for gy in range(-r, r + 1):
 			for gx in range(-r, r + 1):
 				var cell := Vector2i(gx, gy)
 				if not village._cell_free(cell):
 					continue
 				var c: Vector2 = village.cell_to_world(cell)
+				# Warmer tiles glow more: normalise the factor to 0..1 for the fill alpha.
+				var f: float = village._hearth_warmth_factor(cell)
+				var warm01: float = clampf((f - Village.WARMTH_FAR) / span, 0.0, 1.0)
+				draw_rect(Rect2(c - half, Vector2(C, C)),
+					Color(gold.r, gold.g, gold.b, 0.05 + 0.20 * warm01), true)
 				draw_rect(Rect2(c - half, Vector2(C, C)),
 					Color(gold.r, gold.g, gold.b, 0.16), false, 1.0)
 		# The hovered cell: filled tint + bold outline, coloured by validity.
@@ -1124,9 +1452,12 @@ class FarmProject extends Node2D:
 		if v != null and is_instance_valid(v):
 			v._irrigate_farm(c)
 
-# An interactable beside an upgradable building (VILLAGE_DESIGN P2): press E to spend the
-# escalating cost and raise it a tier. Drops out of the interaction set at max level.
-class UpgradePost extends Node2D:
+# An interactable beside a finished building: press E to open the MANAGE menu — upgrade,
+# relocate, or demolish (CRITIQUE V1/V4). It replaces the old single-purpose upgrade post,
+# folding all three construction verbs onto the building itself so a misplaced or outgrown
+# structure is never permanent. Present at every tier (you can still relocate/demolish a
+# maxed building).
+class BuildingManager extends Node2D:
 	var village: Village = null
 	var cell: Vector2i = Vector2i.ZERO
 	var build_id: String = ""
@@ -1140,18 +1471,21 @@ class UpgradePost extends Node2D:
 	func interact_radius() -> float:
 		return 46.0
 
+	# Suppressed while a ghost is up, so E doesn't open a manage menu mid-placement.
 	func can_interact(_by: Node) -> bool:
-		return _level() < Village.MAX_BUILD_LEVEL
+		if village != null and is_instance_valid(village) and village._placing:
+			return false
+		return GameState.grid.has(cell)
 
 	func interact_prompt() -> String:
-		var lv: int = _level()
 		var label: String = Loc.t(String(Village.BUILDINGS.get(build_id, {}).get("label", build_id)))
-		var cost: Dictionary = village._upgrade_cost(build_id, lv)
-		return Loc.t("Upgrade %s  Lv %d→%d  (%s)  [E]") % [label, lv, lv + 1, village._cost_str(cost)]
+		if Village.UPGRADABLE.has(build_id) and _level() < Village.MAX_BUILD_LEVEL:
+			return Loc.t("Manage %s  (Lv %d)  [E]") % [label, _level()]
+		return Loc.t("Manage %s  [E]") % label
 
 	func do_interact(_by: Node) -> void:
 		if village != null and is_instance_valid(village):
-			village._upgrade_building(cell, build_id)
+			village.open_manage_menu(cell, build_id)
 
 # A soil plot atop a finished Crop Bed: plant a seed, wait through 4 stages, harvest.
 class CropPlot extends Node2D:
@@ -1335,6 +1669,8 @@ class SupplyGate extends Node2D:
 class Villager extends Node2D:
 	var pillar: String = "farmer"
 	var village: Village = null
+	var skin: String = ""          # texture override (generic settlers vary their look)
+	var settler: bool = false      # a drawn-in townsperson (no quest; a warm greeting only)
 	var _home: Vector2 = Vector2.ZERO
 	var _roam: float = 92.0
 	var _sprite: Sprite2D = null
@@ -1354,7 +1690,7 @@ class Villager extends Node2D:
 		position = _home
 		Iso.shadow(self, 46.0 * Palette.ACTOR_SCALE, 0.42)
 		_sprite = Sprite2D.new()
-		var key := "survivor_" + pillar
+		var key := skin if skin != "" else "survivor_" + pillar
 		_sprite.texture = Assets.tex(key) if Assets.has(key) else Assets.tex("survivor_farmer")
 		add_child(_sprite)
 		_base_scale = Iso.mount_body(_sprite, 5.0)
@@ -1402,7 +1738,7 @@ class Villager extends Node2D:
 	func interact_prompt() -> String:
 		var q: Dictionary = Village.QUESTS.get(pillar, {})
 		if q.is_empty():
-			return Loc.t("Speak to the %s  [E]") % Loc.t(pillar)
+			return Loc.t("Greet the settler  [E]") if settler else Loc.t("Speak to the %s  [E]") % Loc.t(pillar)
 		match _state():
 			"active":
 				var prog: int = village.quest_progress(pillar)
@@ -1426,6 +1762,10 @@ class Villager extends Node2D:
 	func do_interact(_by: Node) -> void:
 		var q: Dictionary = Village.QUESTS.get(pillar, {})
 		if q.is_empty():
+			if settler:
+				var lines: Array = Village.SETTLER_LINES
+				if not lines.is_empty():
+					_toast(Loc.t(String(lines[randi() % lines.size()])), Palette.CYAN)
 			return
 		var st := _state()
 		if st == "new":

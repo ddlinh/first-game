@@ -57,8 +57,8 @@ const VI := {
 		"Một tù nhân! Đứng sát và nhấn E để giải cứu — họ sẽ theo ngươi về làng.",
 	"Loot goes in your satchel (bottom-left). Bank it at a HOME gate — die in the dark and you lose most of it.":
 		"Chiến lợi phẩm vào túi đồ (góc dưới-trái). Ký gửi ở cổng VỀ NHÀ — chết trong bóng tối là mất gần hết.",
-	"Pick a building, then left-click a tended (bright) tile to drop its frame. 'Expand Clearing' tends more land to build on.":
-		"Chọn một công trình, rồi chuột-trái vào ô đất đã khai hoang (sáng) để đặt khung. 'Mở Rộng Khoảng Trống' khai hoang thêm đất.",
+	"Pick a building, then place it on a tended (bright) tile. The closer to the hearth, the more warmth it gives. 'Expand Clearing' tends more land.":
+		"Chọn một công trình, rồi đặt nó lên ô đất đã khai hoang (sáng). Càng gần lò sưởi, càng nhiều hơi ấm. 'Mở Rộng Khoảng Trống' khai hoang thêm đất.",
 	"That's a frame. Stand beside it and tap E a few times to hammer it up.":
 		"Đó là cái khung. Đứng cạnh và nhấn E vài lần để đóng nó lên.",
 	"Empty soil. Press E to plant a seed, then come back when it's ripe.":
@@ -74,7 +74,90 @@ const VI := {
 
 	# --- Toasts ---
 	"%s raised!": "Đã dựng %s!",
+	"+%d%% warmth": "+%d%% hơi ấm",
 	"Recovered: %s  —  press K for the Codex": "Đã thu hồi: %s  —  nhấn K để mở Sách Tri Thức",
+
+	# --- Construction management: upgrade / relocate / demolish (CRITIQUE V1/V4) ---
+	"MANAGE": "QUẢN LÝ",
+	"Esc to cancel": "Esc để hủy",
+	"Relocate": "Di dời", "Demolish": "Phá dỡ",
+	"Deepen its boon and warmth; the structure grows taller.":
+		"Tăng sức mạnh và hơi ấm; công trình vươn cao hơn.",
+	"Pick it up and set it on a new tile — no materials lost.":
+		"Nhấc lên và đặt vào ô mới — không mất vật liệu.",
+	"Salvage %s — half the materials; the rest is lost to the teardown.":
+		"Tận thu %s — nửa số vật liệu; phần còn lại mất khi phá dỡ.",
+	"Manage %s  (Lv %d)  [E]": "Quản lý %s  (Cấp %d)  [E]",
+	"Manage %s  [E]": "Quản lý %s  [E]",
+	"%s demolished — salvaged %s": "Đã phá dỡ %s — tận thu %s",
+	"%s relocated": "Đã di dời %s",
+	"Placing %s — pick a tended tile   ·   arrows/mouse, Enter/click, Esc":
+		"Đang đặt %s — chọn ô đã khai hoang   ·   mũi tên/chuột, Enter/nhấp, Esc",
+	"Relocating %s — pick a tended tile   ·   arrows/mouse, Enter/click, Esc":
+		"Đang di dời %s — chọn ô đã khai hoang   ·   mũi tên/chuột, Enter/nhấp, Esc",
+	"Warmth here: +%d%%   ·   closer to the hearth is warmer   ·   Esc to cancel":
+		"Hơi ấm tại đây: +%d%%   ·   càng gần lò sưởi càng ấm   ·   Esc để hủy",
+	"Relocating — pick a tended tile   ·   Esc to cancel":
+		"Đang di dời — chọn ô đã khai hoang   ·   Esc để hủy",
+	"Blocked tile — pick a bright, empty one   ·   Esc to cancel":
+		"Ô bị chặn — chọn ô sáng, trống   ·   Esc để hủy",
+
+	# --- Living settlement: population (VILLAGE_DESIGN P4/P5) ---
+	"settler": "người định cư",
+	"Residents  %d / %d": "Cư dân  %d / %d",
+	"Greet the settler  [E]": "Chào người định cư  [E]",
+	"A wanderer, drawn by the warmth, settles in.  (%d residents)":
+		"Một lữ khách, bị hơi ấm thu hút, đến định cư.  (%d cư dân)",
+	"I followed the light through the frost. It's warm here… I'll stay.":
+		"Tôi lần theo ánh sáng qua giá băng. Nơi này ấm áp… tôi sẽ ở lại.",
+	"Give me a task and I'll earn my place by the fire.":
+		"Giao cho tôi việc gì đó, tôi sẽ xứng đáng có chỗ bên bếp lửa.",
+	"They said the ember-bearer walks again. I had to feel the warmth myself.":
+		"Người ta bảo người-giữ-lửa lại xuất hiện. Tôi phải tự mình cảm nhận hơi ấm.",
+	"A roof, a hearth, a full larder — I'd near forgotten what a home was.":
+		"Một mái nhà, một lò sưởi, một kho đầy — tôi gần như đã quên mái ấm là gì.",
+
+	# --- Reactive Ember lines at milestones (CRITIQUE A5) + Codex read-reward (A6) ---
+	"new": "mới",
+	"You dwell on the memory — the knowing warms the world.  +%d%%":
+		"Ngươi ngẫm về ký ức — sự thấu hiểu sưởi ấm thế giới.  +%d%%",
+	"One roof raised against the dark. The cold has somewhere to lose to now.":
+		"Một mái nhà dựng lên chống lại bóng tối. Giờ cái lạnh đã có nơi để lùi bước.",
+	"The frost draws back a step. You feel it too — the world exhaling.":
+		"Sương giá lùi một bước. Ngươi cũng cảm nhận được — thế giới đang thở ra.",
+	"Halfway to the old warmth. The world is remembering how to be alive.":
+		"Đã nửa đường về hơi ấm xưa. Thế giới đang nhớ lại cách sống.",
+	"So close now. My light strains upward, toward the surface and the sun.":
+		"Gần lắm rồi. Ánh sáng của ta vươn lên, hướng về mặt đất và mặt trời.",
+	"The brute falls. It was only ever the cold, wearing a shape to frighten you.":
+		"Con quái ngã xuống. Nó chỉ là cái lạnh, khoác một hình hài để dọa ngươi.",
+
+	# --- Ruins story fragments (CRITIQUE A3) ---
+	"Examine  [E]": "Xem xét  [E]", "You find…": "Ngươi tìm thấy…",
+	"a child's mitten frozen to a doorstep. Whoever knocked never got an answer.":
+		"một chiếc găng trẻ con đóng băng nơi bậc cửa. Người gõ cửa chẳng bao giờ được đáp lời.",
+	"charcoal tally-marks on a wall — days without sun. They stop at forty-one.":
+		"những vạch than trên tường — số ngày không mặt trời. Chúng dừng ở bốn mươi mốt.",
+	"a hearth swept clean and laid with kindling, waiting for a spark that never came.":
+		"một lò sưởi quét sạch, xếp sẵn củi mồi, chờ một tia lửa chẳng bao giờ đến.",
+	"a courier frozen mid-stride, satchel still full of letters no one will read.":
+		"một người đưa tin đóng băng giữa bước chân, túi vẫn đầy thư chẳng ai đọc.",
+	"a loom with the shuttle still in it, the thread snapped where a hand let go.":
+		"một khung cửi thoi còn nguyên, sợi chỉ đứt nơi một bàn tay buông ra.",
+	"seed jars labelled in a careful hand, scraped empty to the last grain.":
+		"những hũ hạt giống ghi nhãn nắn nót, vét sạch đến hạt cuối cùng.",
+	"a mural of the sun, painted over and over — each layer dimmer than the last.":
+		"một bức bích họa mặt trời, vẽ đi vẽ lại — mỗi lớp mờ hơn lớp trước.",
+	"a ledger: pages of grain, then of firewood, then only of names.":
+		"một cuốn sổ: trang ghi lương thực, rồi củi, rồi chỉ còn những cái tên.",
+	"two chairs drawn close to a cold grate. Whoever sat there stayed to the end.":
+		"hai chiếc ghế kéo sát bên vỉ lò lạnh. Ai ngồi đó đã ở lại đến phút cuối.",
+	"a workshop of half-made tools — someone still believed in a tomorrow to finish them.":
+		"một xưởng đầy dụng cụ dở dang — ai đó vẫn tin có ngày mai để hoàn thành.",
+	"a cradle rocked to a stop, a lullaby scratched into the headboard.":
+		"một chiếc nôi đã ngừng đưa, một khúc ru khắc vội trên thành giường.",
+	"boot-prints in old ash, all leading one way: toward the deep, away from the cold.":
+		"những dấu giày trên tro cũ, đều hướng một phía: xuống sâu, tránh xa cái lạnh.",
 	"Chamber cleared!": "Đã dọn sạch phòng!",
 	"The hearth warms you  (+3)": "Lò sưởi sưởi ấm ngươi  (+3)",
 	"The ruin is conquered!": "Tàn tích đã bị chinh phục!",
@@ -190,6 +273,17 @@ const VI := {
 	"New Game": "Chơi Mới", "Continue": "Tiếp Tục", "Quit": "Thoát",
 	"PAUSED": "TẠM DỪNG", "Resume": "Tiếp tục", "Save Game": "Lưu Game",
 	"Quit to Title": "Về Màn Hình Chính", "Game saved.": "Đã lưu game.",
+
+	# --- Confirmation dialogs (CRITIQUE N1/N2) + player-paced summary (B7) ---
+	"Cancel": "Hủy", "Continue  ▸": "Tiếp tục  ▸",
+	"Start a new game?": "Bắt đầu game mới?",
+	"This erases your saved village, survivors, and warmth — it cannot be undone.":
+		"Việc này xóa ngôi làng, người sống sót và hơi ấm đã lưu — không thể hoàn tác.",
+	"Erase & start": "Xóa & bắt đầu",
+	"Abandon this run?": "Bỏ dở lượt này?",
+	"You are still in the ruins. Quitting now forfeits this descent and every material you haven't banked.":
+		"Ngươi vẫn còn trong tàn tích. Thoát bây giờ sẽ mất lượt xuống này và mọi vật liệu chưa ký gửi.",
+	"Abandon run": "Bỏ dở lượt",
 
 	# --- Settings screen (CRITIQUE B6) ---
 	"Settings": "Thiết Lập", "SETTINGS": "THIẾT LẬP", "Volume": "Âm lượng",

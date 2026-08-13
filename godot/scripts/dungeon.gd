@@ -64,6 +64,7 @@ func _ready() -> void:
 	_collect_open_cells()
 	_scatter_decals()
 	_populate_by_type()
+	_maybe_spawn_relic()
 	_spawn_total = _enemies_alive       # remember the room's starting head-count
 	_spawn_braziers()
 	_setup_hero_light()
@@ -429,6 +430,27 @@ func _spawn_pickup(kind: String, pos: Vector2) -> void:
 	pk.position = pos
 	add_child(pk)
 
+# Seed the chamber with an environmental story fragment (CRITIQUE A3): a frozen remnant to
+# examine. Skipped in boss rooms and the very first descent (kept clean for the boss beat
+# and onboarding), a coin-flip otherwise, and only while undiscovered fragments remain.
+func _maybe_spawn_relic() -> void:
+	if node_type == "boss" or room_index <= 1:
+		return
+	if randf() > 0.55:
+		return
+	var idx: int = GameState.next_ruins_fragment()
+	if idx < 0:
+		return
+	var cells: Array = _pick_spawn_cells(1, 3)
+	if cells.is_empty():
+		return
+	var r := Relic.new()
+	r.frag_idx = idx
+	r.fragment = String(Lore.RUINS_FRAGMENTS[idx])
+	r.dungeon = self
+	r.position = _cell_center(cells[0])
+	add_child(r)
+
 # ---------------------------------------------------------------------------
 # Arena clear → open the choice of exits
 # ---------------------------------------------------------------------------
@@ -440,6 +462,9 @@ func _on_room_cleared(silent: bool = false) -> void:
 		return
 	_cleared = true
 	GameState.run_stats["rooms"] = int(GameState.run_stats.get("rooms", 0)) + 1
+	# The Ember speaks the first time the Warden falls (CRITIQUE A5) — one-time, persisted.
+	if node_type == "boss":
+		Main.tip("ember_first_boss", "The brute falls. It was only ever the cold, wearing a shape to frighten you.")
 	if hud and hud.has_method("hide_boss"):
 		hud.call("hide_boss")
 	if hud and hud.has_method("set_enemies"):
@@ -571,6 +596,61 @@ class Pickup extends Area2D:
 			Vfx.embers(get_parent(), global_position, 8, Palette.GOLD)
 			Vfx.float_text(get_parent(), global_position, "+1 " + kind, Palette.AMBER)
 			queue_free()
+
+# A frozen remnant of the people who lived here (CRITIQUE A3): examine it for a one-line
+# story fragment, so a chamber reads as a place someone lost rather than a bare arena.
+class Relic extends Node2D:
+	var fragment: String = ""
+	var frag_idx: int = -1
+	var dungeon = null            # set at spawn; reaches the Hud to show the fragment
+	var _t: float = 0.0
+	var _used: bool = false
+
+	func _ready() -> void:
+		z_index = 1
+		Iso.shadow(self, 30.0, 0.34)
+		add_to_group("interactable")
+
+	func _process(delta: float) -> void:
+		_t += delta
+		queue_redraw()
+
+	func _draw() -> void:
+		# A dark, frost-rimed mound with a pale ice shard and a cold glimmer that pulses,
+		# so the player reads it as something worth crossing the room to examine.
+		var pulse: float = 0.5 + 0.5 * sin(_t * 2.0)
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2(1.0, Palette.SQUASH))
+		draw_circle(Vector2.ZERO, 12.0, Palette.SHADOW)
+		draw_circle(Vector2(0.0, -1.5), 9.0, Color(0.42, 0.46, 0.52))
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		if not _used:
+			var shard := PackedVector2Array([Vector2(-4.0, -3.0), Vector2(0.0, -21.0), Vector2(4.0, -3.0)])
+			draw_colored_polygon(shard, Color(0.62, 0.80, 1.0))
+			draw_circle(Vector2(0.0, -18.0), 3.0 + pulse * 1.6,
+				Color(Palette.CYAN.r, Palette.CYAN.g, Palette.CYAN.b, 0.35 + 0.3 * pulse))
+
+	func interact_radius() -> float:
+		return 34.0
+
+	func can_interact(_by: Node) -> bool:
+		return not _used
+
+	func interact_prompt() -> String:
+		return Loc.t("Examine  [E]")
+
+	func do_interact(_by: Node) -> void:
+		if _used:
+			return
+		_used = true
+		remove_from_group("interactable")
+		GameState.mark_ruins_found(frag_idx)
+		Sfx.play("ui", -7.0)
+		Vfx.embers(get_parent(), global_position + Vector2(0.0, -12.0), 10, Palette.CYAN)
+		Vfx.ring(get_parent(), global_position, 34.0, Palette.CYAN, 0.5)
+		if dungeon != null and is_instance_valid(dungeon) and dungeon.hud != null \
+				and dungeon.hud.has_method("discovery"):
+			dungeon.hud.call("discovery", fragment)
+		queue_redraw()
 
 # A choice gate raised when the arena is cleared: one per reachable map node (its
 # colour/icon previewing the room type) plus a HOME gate, each pulsing so the

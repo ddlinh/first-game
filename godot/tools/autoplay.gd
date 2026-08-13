@@ -95,6 +95,12 @@ func _process(delta: float) -> void:
 		h0.call("pick_boon_index", 0)
 		_announce("Drafting a Bloom boon")
 		return
+	# The run-summary / death card now pauses the world (CRITIQUE B7): dismiss it to resume,
+	# just like the boon draft, so the bot never deadlocks behind it.
+	if h0 != null and h0.has_method("summary_open") and bool(h0.call("summary_open")):
+		h0.call("dismiss_summary")
+		_announce("Dismissing the run summary")
+		return
 	var p := _player()
 	if p == null:
 		return
