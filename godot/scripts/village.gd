@@ -34,7 +34,8 @@ const BUILDINGS := {
 # the Farmer lays out this fallow cell from his knowledge, and the hero must supply the
 # materials he lacks to break it into a working farm.
 const FARM_CELL := Vector2i(2, 1)
-const FARM_SETUP := {"wood": 6, "seeds": 4}   # what the Farmer needs to break the fallow ground
+const FARM_SETUP := {"wood": 6, "seeds": 4}       # break the fallow ground (fallow → active)
+const FARM_IRRIGATE := {"stone": 8, "wood": 4}    # the Farmer's follow-up project (active → irrigated)
 
 # Buildings can be upgraded Lv1→3 (VILLAGE_DESIGN P2/V6): each tier deepens the run-boon
 # and warmth, and the structure visibly grows. Only the two combat buildings upgrade
@@ -395,12 +396,16 @@ func _setup_farm() -> void:
 		Main.tip("farm_fallow", "The Farmer remembers this craft — he's tilled a plot from memory, but lacks the materials to work it. Bring him what he needs.")
 	if GameState.farm_state == "fallow":
 		_spawn_fallow_plot(FARM_CELL)
-	elif GameState.farm_state == "active":
+	elif GameState.farm_state == "active" or GameState.farm_state == "irrigated":
 		# _seed_and_rebuild raises the plot from the grid; only self-heal if it's missing.
 		if not GameState.grid.has(FARM_CELL):
-			GameState.grid[FARM_CELL] = {"type": "crop_bed", "built": true, "seeded": true}
+			GameState.grid[FARM_CELL] = {"type": "crop_bed", "built": true, "seeded": true, "level": 1}
 			_add_building_sprite(FARM_CELL, "crop_bed")
 			_spawn_crop_plot(FARM_CELL)
+		if GameState.farm_state == "active":
+			_spawn_farm_project(FARM_CELL)     # the Farmer offers the irrigation project
+		else:
+			_add_irrigation_visuals(FARM_CELL) # channels that mark the worked, watered farm
 	_update_objective()
 
 func _spawn_fallow_plot(cell: Vector2i) -> void:
@@ -426,6 +431,52 @@ func _activate_farm(cell: Vector2i) -> void:
 	if line != "":
 		Main.tip("codex_agriculture", line)
 	_update_objective()
+
+# The Farmer's standing offer once the farm works: a "project stake" a cell beside the
+# plot (kept apart from the plant/harvest spot so the two prompts never collide).
+func _spawn_farm_project(cell: Vector2i) -> void:
+	var fp := FarmProject.new()
+	fp.village = self
+	fp.cell = cell
+	fp.position = cell_to_world(cell) + Vector2(float(Palette.CELL), 0.0)
+	add_child(fp)
+
+# The Farmer's follow-up (VILLAGE_DESIGN §4.1 tier 5): dig irrigation. Crops ripen
+# faster and yield more, the descent carries more Provisions (the farm counts as two
+# crop-bed levels), and the world warms — the flagship chain keeps evolving.
+func _irrigate_farm(cell: Vector2i) -> void:
+	GameState.farm_state = "irrigated"
+	var d: Dictionary = GameState.grid.get(cell, {})
+	d["level"] = 2
+	GameState.grid[cell] = d
+	_add_irrigation_visuals(cell)
+	GameState.add_gwi(0.08)
+	Vfx.embers(self, cell_to_world(cell), 24, Palette.CYAN)
+	Sfx.play("bloom", -3.0)
+	if hud:
+		hud.toast(Loc.t("Irrigation dug — the farm thrives, and feeds your descents."), Palette.GOLD)
+	Main.tip("farm_irrigated", "Water reaches every row now — crops ripen faster, the harvest runs deeper, and you descend with more Provisions.")
+	_update_objective()
+
+# A little ring of flowing-water channels around the farm (shared stream shader), so an
+# irrigated plot reads at a glance. Named + guarded so it's raised exactly once.
+func _add_irrigation_visuals(cell: Vector2i) -> void:
+	var nm := "Irrigation_%d_%d" % [cell.x, cell.y]
+	if has_node(NodePath(nm)):
+		return
+	var root := Node2D.new()
+	root.name = nm
+	root.z_index = -8   # over the grass, under the crop plot
+	add_child(root)
+	var c := float(Palette.CELL)
+	for off in [Vector2(-0.7, 0.0), Vector2(0.7, 0.0), Vector2(0.0, 0.72)]:
+		var s := Sprite2D.new()
+		s.texture = Assets.tex("tile_water")
+		s.scale = Vector2(Palette.TILE_SX * 0.6, Palette.TILE_SY * 0.6)
+		s.position = cell_to_world(cell) + off * c
+		s.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
+		s.material = _water_material()
+		root.add_child(s)
 
 # How many buildings the player has actually raised (for the builder's quest).
 func built_count() -> int:
@@ -687,7 +738,7 @@ func _open_build_menu() -> void:
 		var id: String = key
 		# Crop Beds require the Farmer's knowledge — you can only expand the farm once
 		# he's established it (VILLAGE_DESIGN P1). Before that, farming isn't buildable.
-		if id == "crop_bed" and GameState.farm_state != "active":
+		if id == "crop_bed" and not (GameState.farm_state == "active" or GameState.farm_state == "irrigated"):
 			continue
 		var info: Dictionary = BUILDINGS[id]
 		var cost: Dictionary = info["cost"]
@@ -1006,6 +1057,57 @@ class FallowPlot extends Node2D:
 		if v != null and is_instance_valid(v):
 			v._activate_farm(c)
 
+# The Farmer's follow-up offer once the farm is active (VILLAGE_DESIGN §4.1 tier 5): a
+# little project stake beside the plot — press E to fund irrigation. Removes itself once
+# the farm is irrigated.
+class FarmProject extends Node2D:
+	var village: Village = null
+	var cell: Vector2i = Vector2i.ZERO
+
+	func _ready() -> void:
+		z_index = 2
+		add_to_group("interactable")
+
+	# A small stake + signboard so it reads as "work to be done here".
+	func _draw() -> void:
+		draw_line(Vector2(0, 2), Vector2(0, -24), Palette.WOOD_D, 3.0)
+		var sign := Rect2(Vector2(-11, -34), Vector2(22, 13))
+		draw_rect(sign, Palette.WOOD, true)
+		draw_rect(sign, Palette.WOOD_D, false, 1.5)
+
+	func _process(_delta: float) -> void:
+		var pl: Node2D = get_tree().get_first_node_in_group("player") as Node2D
+		if pl != null and global_position.distance_to(pl.global_position) < 84.0:
+			Main.tip("farm_irrigate_hint", "The Farmer wants to dig irrigation — %d stone and %d wood, and the farm will thrive."
+				% [int(Village.FARM_IRRIGATE["stone"]), int(Village.FARM_IRRIGATE["wood"])])
+
+	func interact_radius() -> float:
+		return 42.0
+
+	func can_interact(_by: Node) -> bool:
+		return GameState.farm_state == "active"
+
+	func interact_prompt() -> String:
+		var ns: int = int(Village.FARM_IRRIGATE["stone"])
+		var nw: int = int(Village.FARM_IRRIGATE["wood"])
+		if GameState.can_afford(Village.FARM_IRRIGATE):
+			return Loc.t("Dig irrigation  (%d stone, %d wood)  [E]") % [ns, nw]
+		return Loc.t("Irrigation — needs %d stone, %d wood  (you have %d, %d)") \
+			% [ns, nw, GameState.amount("stone"), GameState.amount("wood")]
+
+	func do_interact(_by: Node) -> void:
+		if not GameState.can_afford(Village.FARM_IRRIGATE):
+			if village != null and village.hud != null and village.hud.has_method("toast"):
+				village.hud.call("toast", Loc.t("The Farmer needs %d stone and %d wood.")
+					% [int(Village.FARM_IRRIGATE["stone"]), int(Village.FARM_IRRIGATE["wood"])], Palette.BLOOD)
+			return
+		GameState.spend(Village.FARM_IRRIGATE)
+		var v: Village = village
+		var c: Vector2i = cell
+		queue_free()
+		if v != null and is_instance_valid(v):
+			v._irrigate_farm(c)
+
 # An interactable beside an upgradable building (VILLAGE_DESIGN P2): press E to spend the
 # escalating cost and raise it a tier. Drops out of the interaction set at max level.
 class UpgradePost extends Node2D:
@@ -1096,14 +1198,22 @@ class CropPlot extends Node2D:
 		if village != null and is_instance_valid(village):
 			village._update_objective()
 
-	# Reap a ripe plot: +2 food, +1 seed back (loop-sustaining), reset to empty soil.
+	# Irrigation (VILLAGE_DESIGN §4.1 tier 5) ripens crops faster and yields more food.
+	func _stage_time() -> float:
+		return STAGE_TIME * (0.7 if GameState.farm_state == "irrigated" else 1.0)
+
+	func _yield_food() -> int:
+		return 3 if GameState.farm_state == "irrigated" else 2
+
+	# Reap a ripe plot: +food, +1 seed back (loop-sustaining), reset to empty soil.
 	# Shared by the player's manual harvest and the Farmer's auto-tend.
 	func _harvest() -> void:
-		GameState.add_resource("food", 2)
+		var food: int = _yield_food()
+		GameState.add_resource("food", food)
 		GameState.add_resource("seeds", 1)
 		Sfx.play("harvest", -6.0)
 		Vfx.embers(get_parent(), global_position, 12, Palette.GOLD)
-		Vfx.float_text(get_parent(), global_position, "+2 food", Palette.AMBER)
+		Vfx.float_text(get_parent(), global_position, "+%d food" % food, Palette.AMBER)
 		stage = -1
 		t = 0.0
 		_refresh_sprite()
@@ -1111,7 +1221,7 @@ class CropPlot extends Node2D:
 	func _process(delta: float) -> void:
 		if stage >= 0 and stage < 3:
 			t += delta
-			if t >= STAGE_TIME:
+			if t >= _stage_time():
 				t = 0.0
 				stage = mini(stage + 1, 3)
 				_refresh_sprite()
@@ -1119,7 +1229,7 @@ class CropPlot extends Node2D:
 		# and the farm is active, empty soil re-sows itself from the seed stock and ripe
 		# crops are collected over time — so the farm produces food even while you're in
 		# the ruins. Seed-gated, so it stalls if you run the seed stock dry.
-		if GameState.has_rescued("farmer") and GameState.farm_state == "active":
+		if GameState.has_rescued("farmer") and (GameState.farm_state == "active" or GameState.farm_state == "irrigated"):
 			_auto_t += delta
 			if stage == -1 and GameState.amount("seeds") > 0 and _auto_t >= 2.5:
 				GameState.spend({"seeds": 1})

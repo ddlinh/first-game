@@ -162,6 +162,14 @@ const VI := {
 		"Đất hoang — cần %d gỗ, %d hạt giống  (ngươi có %d, %d)",
 	"The Farmer needs %d wood and %d seeds first.":
 		"Nông Dân cần %d gỗ và %d hạt giống trước đã.",
+	"Dig irrigation  (%d stone, %d wood)  [E]":
+		"Đào kênh tưới  (%d đá, %d gỗ)  [E]",
+	"Irrigation — needs %d stone, %d wood  (you have %d, %d)":
+		"Kênh tưới — cần %d đá, %d gỗ  (ngươi có %d, %d)",
+	"The Farmer needs %d stone and %d wood.":
+		"Nông Dân cần %d đá và %d gỗ.",
+	"Irrigation dug — the farm thrives, and feeds your descents.":
+		"Kênh tưới đã đào — nông trại tươi tốt, và tiếp lương cho những chuyến xuống hang.",
 
 	# --- Win screen (CRITIQUE B4/A1) ---
 	"THE WORLD IS REKINDLED": "THẾ GIỚI ĐÃ HỒI SINH",

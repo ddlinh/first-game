@@ -84,8 +84,9 @@ var quests: Dictionary = {}
 
 # The farm is gated on the FARMER (VISION: knowledge is carried by people). Rescuing
 # the Farmer lays out fallow ground from his knowledge; the hero then supplies the
-# materials he lacks to break it. "none" (no Farmer yet) → "fallow" (laid out, awaiting
-# 6 wood + 4 seeds) → "active" (worked, producing food + Provisions).
+# materials he lacks to break it, and later funds irrigation. "none" (no Farmer yet) →
+# "fallow" (awaiting 6 wood + 4 seeds) → "active" (worked) → "irrigated" (his follow-up
+# project: faster/richer crops + more Provisions on descent).
 var farm_state: String = "none"
 
 # Recovered-knowledge Codex (QA D-06): ids from Lore.ENTRIES the player has unlocked.

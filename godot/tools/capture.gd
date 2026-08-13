@@ -155,6 +155,17 @@ func _process(_delta: float) -> void:
 			main.call("return_to_village")
 		418:
 			await _shot("17_farm_fallow")
+		420:
+			# Farm irrigation tier (VILLAGE_DESIGN §4.1): break + irrigate the farm, then
+			# rebuild so it shows the worked plot with its water channels.
+			GameState.add_resource("wood", 20)
+			GameState.add_resource("stone", 20)
+			GameState.add_resource("seeds", 10)
+			GameState.farm_state = "irrigated"
+			GameState.grid[Vector2i(2, 1)] = {"type": "crop_bed", "built": true, "seeded": true, "level": 2}
+			main.call("return_to_village")
+		423:
+			await _shot("24_farm_irrigated")
 		424:
 			# Win screen (CRITIQUE B4/A1): the Ember's epilogue at full warmth.
 			_hud().call("show_victory", {"runs": 4, "rescued": 3, "buildings": 5})
