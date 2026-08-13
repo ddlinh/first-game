@@ -525,6 +525,7 @@ func take_damage(n: int, from_dir: Vector2 = Vector2.ZERO, crit: bool = false) -
 	hp -= n
 	global_position += from_dir * (11.0 if crit else 6.0)
 	Vfx.hit_spark(get_parent(), global_position)
+	Sfx.play("crit" if crit else "hit", -4.0)
 	# Floating damage number so hits read as landing, gold on a crit.
 	var up: Vector2 = Vector2(0.0, -30.0 * Palette.ACTOR_SCALE)
 	Vfx.float_text(get_parent(), global_position + up, str(n),
@@ -570,6 +571,7 @@ func _die(from_dir: Vector2) -> void:
 	Vfx.crunch(get_parent(), global_position + Vector2(0.0, -30.0 * Palette.ACTOR_SCALE), from_dir)
 	Vfx.embers(get_parent(), global_position, 10, Palette.SHADOW.lightened(0.12))
 	Vfx.hitstop(self, 0.045)
+	Sfx.play("hit_heavy", -5.0, 0.9)
 	Main.shake(0.10)
 	if _sprite == null:
 		queue_free()

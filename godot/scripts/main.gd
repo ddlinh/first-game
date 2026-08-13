@@ -131,6 +131,7 @@ func _ready() -> void:
 # The world fully rekindled. Raise the Ember's epilogue over a paused world — the
 # rekindling payoff the VISION is built around.
 func _on_game_won() -> void:
+	Sfx.play("win", 0.0)
 	if _hud != null and _hud.has_method("show_victory"):
 		var built := 0
 		for key in GameState.grid.keys():
@@ -530,6 +531,7 @@ func _on_player_died() -> void:
 		return
 	_returning = true
 	_add_trauma(0.95)
+	Sfx.play("death", -2.0)
 	# Death forfeits most of the satchel (25% salvaged) — the stakes that make a run
 	# a gamble (QA F-01). Capture the summary before the village reloads.
 	var res: Dictionary = GameState.forfeit_satchel(0.25)

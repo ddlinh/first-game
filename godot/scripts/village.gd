@@ -135,6 +135,7 @@ func _ready() -> void:
 	# Warmth now drives the one shared grade (Main) plus visible world objects —
 	# the second full-screen overlay is gone (QA F-18/F-23).
 	_apply_warmth(GameState.gwi)
+	Sfx.ambient(true)   # the hearth's looping crackle — the sanctuary sounds alive (B3)
 
 	# Build-menu wiring (null-guarded: Main may not have supplied a Hud).
 	if hud:
@@ -410,6 +411,7 @@ func _activate_farm(cell: Vector2i) -> void:
 	_spawn_crop_plot(cell)
 	GameState.add_gwi(0.08)
 	Vfx.embers(self, cell_to_world(cell), 26, Palette.MOSS_L)
+	Sfx.play("bloom", -3.0)
 	if hud:
 		hud.toast(Loc.t("The Farmer breaks the fallow ground — the farm lives!"), Palette.GOLD)
 	var line: String = String(Lore.EMBER_LINE.get("agriculture", ""))
@@ -559,6 +561,7 @@ func finish_building(cell: Vector2i, build_id: String) -> void:
 	var n: int = maxi(1, GameState.building_count(build_id))
 	GameState.add_gwi(float(info.get("gwi", 0.0)) / float(n))
 	Vfx.embers(self, cell_to_world(cell), 22, Palette.GOLD)
+	Sfx.play("warm", -5.0)
 	if hud:
 		hud.toast(Loc.t("%s raised!") % Loc.t(String(info.get("label", build_id))), Palette.GOLD)
 
@@ -847,6 +850,7 @@ class Scaffold extends Node2D:
 		Vfx.dust(get_parent(), global_position, 6)
 		Vfx.float_text(get_parent(), global_position + Vector2(0.0, -26.0),
 			"%d%%" % int(progress * 100.0), Palette.GOLD_L)
+		Sfx.play("build", -5.0)
 		_thunk()
 		if progress >= 1.0:
 			_complete()
@@ -1001,6 +1005,7 @@ class CropPlot extends Node2D:
 	func _harvest() -> void:
 		GameState.add_resource("food", 2)
 		GameState.add_resource("seeds", 1)
+		Sfx.play("harvest", -6.0)
 		Vfx.embers(get_parent(), global_position, 12, Palette.GOLD)
 		Vfx.float_text(get_parent(), global_position, "+2 food", Palette.AMBER)
 		stage = -1
@@ -1100,6 +1105,7 @@ class SupplyGate extends Node2D:
 
 	func do_interact(_by: Node) -> void:
 		if village:
+			Sfx.play("descend", -3.0)
 			village.expedition_requested.emit()
 
 # A rescued survivor living in the village: strolls the clearing, stops to WORK

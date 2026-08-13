@@ -55,6 +55,7 @@ func _ready() -> void:
 	# Feet-order depth so the hero sorts correctly against braziers, the portal and
 	# husks instead of drawing through them.
 	y_sort_enabled = true
+	Sfx.ambient(false)   # leave the hearth's crackle behind — the ruins are cold and silent (B3)
 	# Near-black ambient FIRST, so every light added after it carves a pool out of
 	# the dark rather than washing over a fully-lit floor.
 	Iso.ambient(self, Palette.AMBIENT_DUNGEON)
@@ -564,6 +565,7 @@ class Pickup extends Area2D:
 			# Into the run satchel, not the bank — you only keep this if you make it
 			# home alive (QA F-01).
 			GameState.satchel_add(kind, 1)
+			Sfx.play("pickup", -6.0)
 			Main.tip("loot", "Loot goes in your satchel (bottom-left). Bank it at a HOME gate — die in the dark and you lose most of it.")
 			Vfx.ring(get_parent(), global_position, 40.0, Palette.GOLD, 0.4)
 			Vfx.embers(get_parent(), global_position, 8, Palette.GOLD)

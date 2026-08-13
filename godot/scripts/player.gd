@@ -658,6 +658,7 @@ func take_damage(n: int) -> void:
 	_invuln = 0.6
 	hp -= n
 	_flash(Palette.BLOOD)
+	Sfx.play("hurt", -3.0)
 	hp_changed.emit(hp, max_hp)
 	Vfx.float_text(get_parent(), global_position + Vector2(0.0, -42.0 * Palette.ACTOR_SCALE),
 		"-%d" % n, Palette.BLOOD)
@@ -729,6 +730,7 @@ func _perfect_parry() -> void:
 	Vfx.ring(get_parent(), global_position, 60.0, Palette.CYAN, 0.30)
 	Vfx.float_text(get_parent(), global_position + Vector2(0.0, -42.0 * Palette.ACTOR_SCALE),
 		"PARRY!", Palette.GOLD_L)
+	Sfx.play("parry", 0.0)
 	Vfx.hitstop(self, PARRY_HITSTOP)
 	Main.shake(PARRY_SHAKE)
 	Main.zoom_punch(0.03)
@@ -763,6 +765,7 @@ func _start_dash() -> void:
 	_dash_dir = d
 	_move_dir = d
 	facing = d
+	Sfx.play("dash", -6.0)
 	_dash_t = DASH_TIME
 	_dash_cd = DASH_CD
 	_invuln = maxf(_invuln, DASH_IFRAMES)
@@ -894,6 +897,7 @@ func _bloom(stage: int) -> void:
 	Vfx.embers(get_parent(), global_position, 18, Palette.EMBER)
 	Vfx.float_text(get_parent(), global_position + up,
 		"%s BLOOM" % STAGE_NAMES[clampi(stage, 0, STAGE_NAMES.size() - 1)], Palette.GOLD_L)
+	Sfx.play("bloom", -1.0)
 	Vfx.hitstop(self, 0.05)
 	Main.shake(0.14)
 	Main.zoom_punch(0.035)

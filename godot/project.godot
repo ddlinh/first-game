@@ -17,6 +17,7 @@ config/icon="res://icon.svg"
 Palette="*res://scripts/palette.gd"
 Assets="*res://scripts/assets.gd"
 GameState="*res://scripts/game_state.gd"
+Sfx="*res://scripts/sfx.gd"
 
 [display]
 

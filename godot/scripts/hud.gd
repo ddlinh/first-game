@@ -1930,7 +1930,11 @@ func _big_button(text: String) -> Button:
 	b.add_theme_stylebox_override("normal", _button_style(false))
 	b.add_theme_stylebox_override("hover", _button_style(true))
 	b.add_theme_stylebox_override("pressed", _button_style(true))
+	b.pressed.connect(_ui_click)   # a soft click on every title/pause button (B3)
 	return b
+
+func _ui_click() -> void:
+	Sfx.play("ui", -9.0)
 
 func _quit_game() -> void:
 	get_tree().quit()
@@ -2134,6 +2138,7 @@ func _dismiss_victory() -> void:
 		_victory_root = null
 
 func _select(id: String) -> void:
+	Sfx.play("ui", -8.0)
 	close_build_menu()
 	build_selected.emit(id)
 
@@ -2217,6 +2222,7 @@ func _boon_card(card: Dictionary, num: int = 0) -> Control:
 	return b
 
 func _pick_boon(id: String) -> void:
+	Sfx.play("bloom", -8.0)   # a bright confirm on locking in a boon
 	var cb := _boon_cb
 	_boon_cb = Callable()
 	_boon_ids.clear()
