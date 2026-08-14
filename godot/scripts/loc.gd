@@ -191,7 +191,7 @@ const VI := {
 	"Treasure": "Kho báu", "a loot hoard": "một kho chiến lợi phẩm",
 	"Rescue": "Giải cứu", "%s waits": "%s đang chờ",
 	"Hearth": "Lò sưởi", "rest & recover": "nghỉ & hồi phục",
-	"The Warden": "Kẻ Canh Giữ", "a brute guards the deep": "một con thú dữ canh vực sâu",
+	"The Warden": "Kẻ Canh Giữ", "the deep's guardian — it does not bleed": "kẻ canh giữ vực sâu — nó chẳng chảy máu",
 	"Combat": "Chiến đấu", "husks & loot": "vỏ rỗng & chiến lợi phẩm",
 	"Return home": "Về nhà", "bank & rebuild": "ký gửi & xây dựng",
 
@@ -258,6 +258,20 @@ const VI := {
 	"Irrigation dug — the farm thrives, and feeds your descents.":
 		"Kênh tưới đã đào — nông trại tươi tốt, và tiếp lương cho những chuyến xuống hang.",
 
+	# --- Storage economy + village stakes (VILLAGE_DESIGN P5/P6) ---
+	"Granary": "Kho Lương", "Watchtower": "Tháp Canh",
+	"A storehouse. Raises how much wood, stone, iron & food you can stockpile before surplus is lost.":
+		"Một nhà kho. Tăng lượng gỗ, đá, sắt & lương thực ngươi có thể tích trữ trước khi phần dư bị mất.",
+	"A brazier-topped tower. Wards the village against the cold's return — blunts the cold snaps that sap its warmth.":
+		"Một tháp có chậu lửa trên đỉnh. Che chắn ngôi làng khỏi cái lạnh quay lại — làm dịu những đợt rét cắt bớt hơi ấm.",
+	"Your stores are brimming — surplus is being lost. Raise a Granary to stockpile more.":
+		"Kho của ngươi đã đầy ắp — phần dư đang mất đi. Dựng một Kho Lương để tích trữ nhiều hơn.",
+	"The watchtowers held the cold at bay.": "Những tháp canh đã chặn được cái lạnh.",
+	"A cold snap struck — the watchtowers softened it to −%d%% warmth.":
+		"Một đợt rét ập tới — các tháp canh làm dịu chỉ còn −%d%% hơi ấm.",
+	"A cold snap struck the village — warmth −%d%%.":
+		"Một đợt rét ập vào ngôi làng — hơi ấm −%d%%.",
+
 	# --- Win screen (CRITIQUE B4/A1) ---
 	"THE WORLD IS REKINDLED": "THẾ GIỚI ĐÃ HỒI SINH",
 	"The long dark breaks. Warmth climbs back into the world — and it was you who carried it.":
@@ -267,6 +281,22 @@ const VI := {
 	"Runs survived": "Lượt sống sót", "Rescued": "Đã cứu", "Buildings": "Công trình",
 	"Warmth": "Hơi ấm",
 	"Keep tending your village  ▸": "Tiếp tục chăm lo ngôi làng  ▸",
+	# Post-win destination (CRITIQUE N4): endless deep ruins + re-readable epilogue + title seal.
+	"The deep ruins lie open — descend to see how far the dark still goes.":
+		"Tàn tích sâu đã mở — hãy xuống để xem bóng tối còn kéo dài đến đâu.",
+	"Deepest reached: %d chambers.": "Sâu nhất đã tới: %d phòng.",
+	"The Ember's Epilogue": "Lời Kết Của Tàn Lửa",
+	"The world you rekindled": "Thế giới ngươi đã hồi sinh",
+	"Deepest ruin: %d chambers": "Tàn tích sâu nhất: %d phòng",
+
+	# --- Save legibility (CRITIQUE N5): autosave cue + Continue context ---
+	"Progress saved": "Đã lưu tiến trình",
+	"Not yet descended": "Chưa xuống hầm", "Descent %d": "Lượt xuống %d",
+	"%d rescued": "đã cứu %d", "%d%% warm": "ấm %d%%",
+	"saved just now": "vừa mới lưu",
+	"saved %d min ago": "đã lưu %d phút trước",
+	"saved %d hr ago": "đã lưu %d giờ trước",
+	"saved %d days ago": "đã lưu %d ngày trước",
 
 	# --- Title screen + pause menu (CRITIQUE B1) ---
 	"Carry the last ember home.": "Mang tàn lửa cuối cùng trở về.",
@@ -376,6 +406,44 @@ const VI := {
 		+ "thuật xây dựng bền vững.)",
 	"Undiscovered — rescue this craft's survivor, or raise their building.":
 		"Chưa khám phá — giải cứu người mang nghề này, hoặc dựng công trình của họ.",
+
+	# --- The antagonist: the cold's cause + the Warden's face (CRITIQUE A-antag) ---
+	"The dark was no curse — only everything the living stopped remembering. Warmth is carried, hand to hand, or it is lost.":
+		"Bóng tối chẳng phải lời nguyền — chỉ là tất cả những gì người sống thôi ghi nhớ. Hơi ấm được truyền tay, người này sang người khác, hoặc mất đi.",
+	"The Long Dark": "Đêm Trường Tăm Tối",
+	"the cold": "cái lạnh", "the deep": "vực sâu",
+	("No comet fell; no god turned away. The world went cold the way any "
+		+ "fire goes cold — one untended moment at a time. A craft left untaught. A "
+		+ "hearth left unlit. Warmth is never kept by wishing it; it is carried, hand "
+		+ "to hand, or it is lost. The Long Dark is only the sum of everything the "
+		+ "living stopped remembering — which is why it is the one enemy that "
+		+ "remembering can undo."):
+		"Không sao chổi nào rơi; chẳng vị thần nào ngoảnh mặt. Thế giới hóa lạnh theo cách "
+		+ "bất kỳ ngọn lửa nào tàn đi — từng khoảnh khắc không ai chăm nom. Một nghề không "
+		+ "được truyền dạy. Một lò sưởi không ai nhóm lại. Hơi ấm chẳng bao giờ được giữ bằng "
+		+ "ước muốn; nó được truyền tay, người này sang người khác, hoặc mất đi. Đêm Trường "
+		+ "Tăm Tối chỉ là tổng của tất cả những gì người sống thôi ghi nhớ — và cũng vì thế, "
+		+ "nó là kẻ thù duy nhất mà sự ghi nhớ có thể xóa bỏ.",
+	("At the oldest ruin, where the first hearth was let die, the cold learned "
+		+ "a shape and set it to guard the place. The Warden is no beast — strike it "
+		+ "and it does not bleed; it gutters and goes out, like a flame starved of "
+		+ "air. It stands watch over the deep because the dark still fears what was "
+		+ "kindled there once, and might be kindled again."):
+		"Nơi phế tích cổ xưa nhất, chỗ lò sưởi đầu tiên bị bỏ cho lụi tắt, cái lạnh học lấy "
+		+ "một hình hài và đặt nó canh giữ nơi ấy. Kẻ Canh Giữ không phải quái vật — đâm nó, "
+		+ "nó chẳng chảy máu; nó leo lét rồi tắt ngấm, như ngọn lửa thiếu dưỡng khí. Nó canh "
+		+ "gác vực sâu bởi bóng tối vẫn sợ thứ từng được nhóm lên nơi đó, và có thể được nhóm "
+		+ "lại lần nữa.",
+
+	# --- Succession-stage flavor (CRITIQUE A7): one ecological line per Bloom ---
+	"Pioneers move first: lichen and fireweed, cracking bare rock into the first thin soil.":
+		"Loài tiên phong đến trước: địa y và cỏ lửa, phá đá trơ thành lớp đất mỏng đầu tiên.",
+	"Herbs and grasses root in — the ground learns to hold water, and to keep its own warmth.":
+		"Thảo mộc và cỏ bén rễ — mặt đất học cách giữ nước, và giữ lấy hơi ấm của chính mình.",
+	"Shrubs crowd close: shade, shelter, and cover enough for larger life to return.":
+		"Bụi cây chen chúc: bóng râm, chỗ trú, và lớp che đủ để sự sống lớn hơn quay về.",
+	"A closed canopy at last. The forest now makes and keeps its own weather — alive, and self-warming.":
+		"Cuối cùng, một tán rừng khép kín. Giờ khu rừng tự tạo và giữ lấy khí hậu của mình — sống động, và tự sưởi ấm.",
 
 	# --- HUD: headers & static labels ---
 	"WARMTH": "HƠI ẤM", "SOIL": "ĐẤT MÙN", "CONTROLS": "ĐIỀU KHIỂN",

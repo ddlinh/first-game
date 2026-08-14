@@ -46,6 +46,8 @@ var _place_label: Label = null
 var _depth_panel: PanelContainer
 var _depth_label: Label
 var _depth_val: int = 0             # last depth, so L can re-translate the banner live
+var _minimap_panel: PanelContainer = null  # persistent descent minimap (CRITIQUE B8), combat-only
+var _minimap_canvas: Control = null
 var _objective: Label
 var _objective_src: String = ""     # untranslated objective, re-applied on a lang swap
 var _controls_card: PanelContainer
@@ -263,6 +265,21 @@ func _build_ui() -> void:
 	dh.add_child(seal)
 	_depth_label = UiKit.label("RUIN  ·  DEPTH 1", 16, Palette.CYAN)
 	dh.add_child(_depth_label)
+
+	# --- Descent minimap (CRITIQUE B8): a compact, always-on read of the run's branching
+	# map — where you stand in the 5 layers and which room types lie next — so the descent
+	# has ambient spatial legibility without opening the full Tab overlay. Combat-only, and
+	# folds away under the Warden bar. Drawn from GameState.run_map, refreshed each room.
+	_minimap_panel = UiKit.panel()
+	_minimap_panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
+	_minimap_panel.position = Vector2(-95, 58)   # clear of the depth caption above it
+	_minimap_panel.visible = false
+	_root.add_child(_minimap_panel)
+	_minimap_canvas = Control.new()
+	_minimap_canvas.custom_minimum_size = Vector2(168, 32)   # bottom stays clear of the toast stack (y≈112)
+	UiKit.ignore(_minimap_canvas)
+	_minimap_canvas.draw.connect(_draw_minimap)
+	_minimap_panel.add_child(_minimap_canvas)
 
 	# --- Toasts: top-centre stack, below the depth banner ---
 	_toast_box = VBoxContainer.new()
@@ -624,9 +641,23 @@ func _refresh_resources(_a := 0) -> void:
 		var lab: Label = _res_labels[kind]
 		var val: int = GameState.amount(kind)
 		var prev: int = int(_res_prev.get(kind, val))
-		lab.text = str(val)
-		# Dim a depleted stock so "you're out of X" reads at a glance.
-		lab.add_theme_color_override("font_color", Palette.UI_DIM if val == 0 else Palette.WHITE)
+		# Capped stockpiles read "val/cap" so the storage economy is legible (VILLAGE_DESIGN
+		# P5): amber near the ceiling, wine when full and spilling — raise a Granary.
+		if GameState.is_capped_resource(kind):
+			var cap: int = GameState.storage_cap()
+			lab.text = "%d/%d" % [val, cap]
+			var col: Color = Palette.WHITE
+			if val == 0:
+				col = Palette.UI_DIM
+			elif val >= cap:
+				col = Palette.WINE
+			elif val >= cap - 5:
+				col = Palette.AMBER
+			lab.add_theme_color_override("font_color", col)
+		else:
+			lab.text = str(val)
+			# Dim a depleted stock so "you're out of X" reads at a glance.
+			lab.add_theme_color_override("font_color", Palette.UI_DIM if val == 0 else Palette.WHITE)
 		# Pop the chip when the count moves — gold on a gain, ember on a spend — so the
 		# economy feels responsive (the farming-sim resource-counter pop).
 		if val != prev and _res_chips.has(kind):
@@ -752,6 +783,10 @@ func set_combat(on: bool) -> void:
 	if _satchel_panel != null:
 		_satchel_panel.visible = on
 		_refresh_satchel()
+	if _minimap_panel != null:
+		_minimap_panel.visible = on and GameState.run_map != null and not _boss_active
+		if _minimap_canvas != null:
+			_minimap_canvas.queue_redraw()
 	if not on:
 		hide_boss()
 		_foe_prev = 999
@@ -814,9 +849,11 @@ func show_boss(boss_name: String, max_hp: int) -> void:
 	_boss_root.modulate = Color(1, 1, 1, 1)
 	if _foe_chip != null:
 		_foe_chip.visible = false
-	# The Warden bar owns the top-centre — fold the depth caption away while it's up.
+	# The Warden bar owns the top-centre — fold the depth caption + minimap away while it's up.
 	if _depth_panel != null:
 		_depth_panel.visible = false
+	if _minimap_panel != null:
+		_minimap_panel.visible = false
 	# Sweep-in from the top.
 	_boss_root.position.y = -30.0
 	var tw := _boss_root.create_tween()
@@ -833,9 +870,13 @@ func hide_boss() -> void:
 	if _boss_root == null or not _boss_active:
 		return
 	_boss_active = false
-	# Bring the depth caption back once the Warden is down (still in the ruin).
+	# Bring the depth caption + minimap back once the Warden is down (still in the ruin).
 	if _combat and _depth_panel != null and _depth_label != null and _depth_label.text != "":
 		_depth_panel.visible = true
+	if _combat and _minimap_panel != null and GameState.run_map != null:
+		_minimap_panel.visible = true
+		if _minimap_canvas != null:
+			_minimap_canvas.queue_redraw()
 	var tw := _boss_root.create_tween()
 	tw.tween_property(_boss_root, "modulate:a", 0.0, 0.4)
 	tw.tween_callback(func(): _boss_root.visible = false)
@@ -1139,6 +1180,67 @@ func set_depth(depth: int) -> void:
 	_depth_panel.visible = true
 
 # ---------------------------------------------------------------------------
+# Descent minimap (CRITIQUE B8). Main calls set_run_progress() after each room swap; the
+# canvas redraws the current run_map — current node ringed gold, the reachable next rooms
+# ringed in their type colour, visited dimmed, the rest faint. Purely a read-out; the Tab
+# overlay and the exit gates carry the labels.
+func set_run_progress() -> void:
+	if _minimap_panel == null:
+		return
+	_minimap_panel.visible = _combat and GameState.run_map != null and not _boss_active
+	if _minimap_canvas != null:
+		_minimap_canvas.queue_redraw()
+
+func _minimap_type_color(t: String) -> Color:
+	match t:
+		"treasure": return Palette.GOLD
+		"rescue": return Palette.MOSS_L
+		"rest": return Palette.AMBER
+		"boss": return Palette.WINE
+		_: return Palette.EMBER
+
+func _draw_minimap() -> void:
+	var rm = GameState.run_map
+	if rm == null or _minimap_canvas == null:
+		return
+	var w: float = _minimap_canvas.size.x
+	var h: float = _minimap_canvas.size.y
+	var layers: int = maxi(1, int(rm.layers))
+	var pad: float = 10.0
+	var cy: float = h * 0.5
+	var step: float = (w - pad * 2.0) / float(maxi(1, layers - 1))
+	# Screen position of every node, laid out by layer (left→right) and stacked in its layer.
+	var pos: Dictionary = {}
+	for L in range(rm.by_layer.size()):
+		var row: Array = rm.by_layer[L]
+		var lx: float = pad + float(L) * step
+		for i in range(row.size()):
+			var oy: float = cy + (float(i) - float(row.size() - 1) * 0.5) * 11.0
+			pos[int(row[i])] = Vector2(lx, oy)
+	# Branches first, faint, so the nodes read on top of them.
+	for a in rm.forward:
+		if not pos.has(a):
+			continue
+		for b in rm.forward[a]:
+			if pos.has(b):
+				_minimap_canvas.draw_line(pos[a], pos[b], Color(1, 1, 1, 0.13), 1.0)
+	# Nodes: current ringed gold, reachable ringed in type colour, visited dim, rest faint.
+	var reach: Array = rm.reachable()
+	for id: int in pos:
+		var p: Vector2 = pos[id]
+		var col: Color = _minimap_type_color(rm.type_of(id))
+		if id == int(rm.current):
+			_minimap_canvas.draw_circle(p, 5.5, Palette.GOLD_L)
+			_minimap_canvas.draw_arc(p, 6.5, 0.0, TAU, 20, Palette.WHITE, 1.5)
+		elif id in reach:
+			_minimap_canvas.draw_circle(p, 4.5, col)
+			_minimap_canvas.draw_arc(p, 6.5, 0.0, TAU, 18, Color(col.r, col.g, col.b, 0.8), 1.2)
+		elif rm.visited.has(id):
+			_minimap_canvas.draw_circle(p, 3.0, Color(col.r, col.g, col.b, 0.5))
+		else:
+			_minimap_canvas.draw_circle(p, 3.0, Color(col.r, col.g, col.b, 0.28))
+
+# ---------------------------------------------------------------------------
 # Onboarding: a persistent objective line and a one-time controls card.
 func set_objective(text: String) -> void:
 	if _objective == null:
@@ -1296,6 +1398,8 @@ func start_village_intro() -> void:
 	await get_tree().create_timer(0.5).timeout
 	if gen != _dlg_gen: return
 	await say("The Ember", "You carried me through the long dark. I am nearly spent… but not yet.")
+	if gen != _dlg_gen: return
+	await say("The Ember", "The dark was no curse — only everything the living stopped remembering. Warmth is carried, hand to hand, or it is lost.")
 	if gen != _dlg_gen: return
 	await say("The Ember", "This was a village once. Rebuild it, and my light returns — warmth, and hope with it.")
 	if gen != _dlg_gen: return
@@ -1723,8 +1827,10 @@ func _input(event: InputEvent) -> void:
 				and event.button_index == MOUSE_BUTTON_LEFT:
 			adv = true
 		elif event is InputEventKey and event.pressed and not event.echo:
+			# Esc advances too (CRITIQUE N6): a first-timer reaching for Escape mid-cutscene
+			# now has a route through — tap it to click past the scripted lines.
 			if event.physical_keycode == KEY_E or event.physical_keycode == KEY_ENTER \
-					or event.physical_keycode == KEY_KP_ENTER:
+					or event.physical_keycode == KEY_KP_ENTER or event.physical_keycode == KEY_ESCAPE:
 				adv = true
 		if adv:
 			if _dlg_text != null and _dlg_text.visible_ratio < 1.0:

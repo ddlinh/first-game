@@ -77,6 +77,18 @@ const CRIT_MULT: int = 2
 # weaker the deeper I push" bug is gone).
 const KINDLE_THRESHOLDS := [0, 8, 20, 40, 70]
 const STAGE_NAMES := ["ASH", "PIONEER", "HERB", "THICKET", "CANOPY"]
+# One line of real ecological-succession flavor per stage (CRITIQUE A7), shown once
+# ever the first time each Bloom lands — so the stage names (which are the actual
+# stages a burned forest recovers through) finally carry their meaning, and the
+# "succession = the world coming back to life" metaphor lands. Index by stage; ASH
+# is the starting stage, so no Bloom ever fires into it.
+const STAGE_FLAVOR := [
+	"",
+	"Pioneers move first: lichen and fireweed, cracking bare rock into the first thin soil.",
+	"Herbs and grasses root in — the ground learns to hold water, and to keep its own warmth.",
+	"Shrubs crowd close: shade, shelter, and cover enough for larger life to return.",
+	"A closed canopy at last. The forest now makes and keeps its own weather — alive, and self-warming.",
+]
 const BLOOM_DMG := 0.12              # damage_mult added per Bloom
 const BLOOM_SPD := 0.04              # speed_mult added per Bloom
 
@@ -900,6 +912,9 @@ func _bloom(stage: int) -> void:
 	Vfx.embers(get_parent(), global_position, 18, Palette.EMBER)
 	Vfx.float_text(get_parent(), global_position + up,
 		"%s BLOOM" % STAGE_NAMES[clampi(stage, 0, STAGE_NAMES.size() - 1)], Palette.GOLD_L)
+	# The A7 succession-flavor line is fired by Main once the boon draft closes and the
+	# world unpauses (via the bloomed signal below) — never here, where it would render
+	# behind the full-screen boon overlay and be consumed unread.
 	Sfx.play("bloom", -1.0)
 	Vfx.hitstop(self, 0.05)
 	Main.shake(0.14)

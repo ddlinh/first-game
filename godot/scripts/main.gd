@@ -108,6 +108,7 @@ func _ready() -> void:
 	_player.died.connect(_on_player_died)
 	# A Bloom offers three boons to draft: pause the world and raise the card (QA D-01).
 	_player.boon_offer.connect(_on_boon_offer)
+	_player.bloomed.connect(_on_bloomed)
 	_last_hp = _player.hp
 
 	_camera = Camera2D.new()
@@ -286,14 +287,28 @@ func _fit_post() -> void:
 # hero takes a HOME gate or falls.
 var _room_in_run: int = 0
 
+# How many layers this descent's ruin has. Five in the base game; once the world is
+# rekindled (CRITIQUE N4), the deep ruins open — each run reaches one layer past your
+# record, so there is always a deeper dark to push into. Capped so a run stays finite.
+func _run_layers() -> int:
+	if not GameState.won:
+		return 5
+	# Each post-win run reaches one layer past your record; the ceiling is high enough that
+	# the "how deep can you push?" chase stays open in any realistic play (deep runs get
+	# lethal long before it), while still bounding a single descent so it can't run forever.
+	return clampi(GameState.deepest_run + 1, 6, 30)
+
 func start_dungeon() -> void:
 	_room_in_run = 1
 	# Fresh satchel + run tally for this descent (QA F-01/F-02).
 	GameState.reset_run()
-	# Roll a fresh branching map for this run; the entrance is its layer-0 node.
+	# Roll a fresh branching map for this run; the entrance is its layer-0 node. Post-win the
+	# ruins run deeper each descent — the endless "how deep can you push?" chase (CRITIQUE N4).
 	var rm := RunMap.new()
-	rm.generate(5)
+	rm.generate(_run_layers())
 	GameState.run_map = rm
+	# Meeting the cold for the first time recovers its story — the cataclysm's cause (A-antag).
+	GameState.unlock_codex("the_long_dark")
 	var d := Dungeon.new()
 	d.room_index = 1
 	d.node_id = rm.current
@@ -311,6 +326,8 @@ func _advance_room(node_id: int) -> void:
 	if rm != null:
 		rm.choose(node_id)
 	_room_in_run += 1
+	# Track the deepest single descent — the record the post-win deep-ruins chase grows from (N4).
+	GameState.deepest_run = maxi(GameState.deepest_run, _room_in_run)
 	var d := Dungeon.new()
 	d.room_index = _room_in_run
 	d.node_id = node_id
@@ -319,14 +336,20 @@ func _advance_room(node_id: int) -> void:
 	d.exited.connect(_on_dungeon_exited)
 	d.advance_requested.connect(_advance_room)
 
-func return_to_village() -> void:
+func return_to_village(from_run: bool = false) -> void:
 	_returning = false
 	GameState.run_map = null   # the run's map dies with the run
+	# A stake at the settlement (VILLAGE_DESIGN P6): only when coming home from a descent,
+	# the cold may strike back — resolved BEFORE the autosave so a warmth loss persists, and
+	# reported on the run-summary card (not a banner that a pause would freeze).
+	GameState.last_cold_snap = GameState.maybe_cold_snap() if from_run else {}
 	var v := Village.new()
 	_install_layer(v, false)
 	v.expedition_requested.connect(start_dungeon)
 	# Autosave on settling back in the village (CRITIQUE B2), once a game is actually
-	# under way — never from the title backdrop.
+	# under way — never from the title backdrop. The player-facing "saved" cue lives on the
+	# run-summary card (CRITIQUE N5), which is shown on every bank/death return and is never
+	# frozen behind a modal nor raised on the initial New Game / Continue village load.
 	if _game_started:
 		GameState.save_game()
 
@@ -394,6 +417,9 @@ func _install_layer(layer: Node2D, is_dungeon: bool, fresh_run: bool = true) -> 
 	_last_hp = _player.hp
 	_hud.set_hp(_player.hp, _player.max_hp)
 	_hud.set_depth(GameState.run_count if is_dungeon else 0)
+	# Refresh the descent minimap for the room we just entered (CRITIQUE B8).
+	if _hud.has_method("set_run_progress"):
+		_hud.set_run_progress()
 	_hud.hide_prompt()
 	_reset_camera()
 
@@ -462,7 +488,7 @@ func _on_dungeon_exited() -> void:
 	# A live return: the satchel banks into the real stockpile, then a summary card.
 	var banked: Dictionary = GameState.bank_satchel()
 	var data: Dictionary = _run_summary(true, banked, {})
-	return_to_village()
+	return_to_village(true)
 	if _hud != null and _hud.has_method("show_run_summary"):
 		_hud.show_run_summary(data)
 
@@ -496,6 +522,14 @@ func _apply_dungeon_grade() -> void:
 # ---------------------------------------------------------------------------
 var _boon_queue: Array = []
 var _boon_active: bool = false
+# The stage of the most recent Bloom, surfaced as an A7 succession-flavor tip once the
+# boon draft fully closes (so it isn't drawn behind the overlay and consumed unread).
+var _pending_succession: int = -1
+
+# A Bloom just landed (fires just before its boon offer). Remember the stage; the flavor
+# line is shown when the draft closes, in _show_next_boon.
+func _on_bloomed(stage: int) -> void:
+	_pending_succession = stage
 
 func _on_boon_offer(cards: Array) -> void:
 	_boon_queue.append(cards)
@@ -506,6 +540,8 @@ func _show_next_boon() -> void:
 	if _boon_queue.is_empty():
 		_boon_active = false
 		get_tree().paused = false
+		# The draft is closed and the world is live again — now the succession line reads (A7).
+		_flush_succession_tip()
 		return
 	_boon_active = true
 	get_tree().paused = true
@@ -520,6 +556,16 @@ func _on_boon_picked(id: String) -> void:
 	if is_instance_valid(_player) and _player.has_method("apply_boon"):
 		_player.apply_boon(id)
 	_show_next_boon()
+
+# Surface the pending succession-flavor line (A7) now that the boon overlay is gone and
+# the world is unpaused — tip() localizes it and shows it once ever per stage.
+func _flush_succession_tip() -> void:
+	var s: int = _pending_succession
+	_pending_succession = -1
+	if s < 0 or _hud == null or not _hud.has_method("tip"):
+		return
+	if s < Player.STAGE_FLAVOR.size() and String(Player.STAGE_FLAVOR[s]) != "":
+		_hud.tip("succession_%d" % s, String(Player.STAGE_FLAVOR[s]))
 
 # Player hp is the one gameplay event the camera reacts to; routing it here keeps
 # the juice out of Player, which does not know a camera exists.
@@ -544,7 +590,7 @@ func _on_player_died() -> void:
 	if _hud:
 		_hud.toast("You fell in the dark...", Palette.BLOOD)
 	get_tree().create_timer(1.6).timeout.connect(func() -> void:
-		return_to_village()
+		return_to_village(true)
 		if _hud != null and _hud.has_method("show_run_summary"):
 			_hud.show_run_summary(data))
 

@@ -63,6 +63,10 @@ var grid: Dictionary = {}
 var gwi: float = 0.0   # 0.0 (cold ash) .. 1.0 (full ember radiance)
 var won: bool = false  # has the world fully rekindled? (win fires once, CRITIQUE B4)
 var run_count: int = 0
+# The deepest single descent reached, in chambers (CRITIQUE N4). Post-win this is the
+# record the endless "deep ruins" chase is built around: once won, each descent runs one
+# layer deeper than this best, so victory has somewhere to go instead of a maxed sandbox.
+var deepest_run: int = 0
 var village_seeded: bool = false  # has the opening village layout been placed?
 # Half-extent (in cells, Chebyshev) of the tended CLEARING you may build on. The
 # world field is large; you spend resources to expand this outward over a run.
@@ -152,8 +156,34 @@ func _mouse_action(action: String, button: int) -> void:
 	InputMap.action_add_event(action, mb)
 
 # --- Resources ---
+# Storage economy (VILLAGE_DESIGN P5): raw stockpiles are capped, so a surplus is a real
+# decision — raise Granaries to store more, or watch banked loot spill and be lost. Seeds
+# are a farm currency and stay uncapped.
+const RESOURCE_CAP_BASE := 50
+const STORAGE_PER_GRANARY := 30
+const CAPPED := {"wood": true, "stone": true, "iron": true, "food": true}
+
+func storage_cap() -> int:
+	return RESOURCE_CAP_BASE + STORAGE_PER_GRANARY * building_count("granary")
+
+func is_capped_resource(kind: String) -> bool:
+	return CAPPED.has(kind)
+
 func add_resource(kind: String, amount: int) -> void:
-	resources[kind] = int(resources.get(kind, 0)) + amount
+	var existing: int = int(resources.get(kind, 0))
+	var total: int = existing + amount
+	# Positive gains for a capped resource may only fill UP TO the ceiling; the overflow is
+	# lost (P5's "build storage or waste surplus" pressure). The ceiling is max(cap, existing)
+	# so a gain never REDUCES a stockpile that was already over cap (e.g. a migrated save) —
+	# a gain must never shrink your stores. Teach the fix once, and only when a Granary is
+	# actually buildable (the Builder is home), so the advice is never a dead end.
+	if amount > 0 and CAPPED.has(kind):
+		var ceiling: int = maxi(storage_cap(), existing)
+		if total > ceiling:
+			total = ceiling
+			if has_rescued("builder"):
+				Main.tip("storage_full", "Your stores are brimming — surplus is being lost. Raise a Granary to stockpile more.")
+	resources[kind] = total
 	resources_changed.emit()
 
 func amount(kind: String) -> int:
@@ -172,6 +202,29 @@ func spend(costs: Dictionary) -> bool:
 		resources[k] = int(resources.get(k, 0)) - int(costs[k])
 	resources_changed.emit()
 	return true
+
+# --- Village stakes: cold snaps (VILLAGE_DESIGN P6) ---
+# Returning from a run, the cold can strike the settlement — the one pressure that pushes
+# warmth DOWN, so defensive building finally has a purpose (V9: warmth used to only ever
+# rise). Watchtowers ward it; about three hold it off entirely. Never before the village is
+# established (gwi ≥ 0.25), never once the world is rekindled. Reported on the run-summary card.
+const COLD_SNAP_CHANCE := 0.30
+const COLD_SNAP_DROP := 0.08
+const COLD_SNAP_FLOOR := 0.15
+var last_cold_snap: Dictionary = {}   # run-scoped; the summary card reads + reports it
+
+func maybe_cold_snap() -> Dictionary:
+	if won or gwi < 0.25:
+		return {"hit": false}
+	if randf() > COLD_SNAP_CHANCE:
+		return {"hit": false}
+	var towers: int = building_count("watchtower")
+	var mitigation: float = clampf(float(towers) / 3.0, 0.0, 1.0)
+	var drop: float = COLD_SNAP_DROP * (1.0 - mitigation)
+	var before: float = gwi
+	if drop > 0.001:
+		set_gwi(maxf(COLD_SNAP_FLOOR, gwi - drop))
+	return {"hit": true, "drop": before - gwi, "towers": towers, "warded": mitigation >= 0.999}
 
 # --- Roster ---
 func add_rescued(pillar: String) -> void:
@@ -290,13 +343,16 @@ func satchel_total() -> int:
 		t += int(satchel[k])
 	return t
 
-# A live return home: merge the satchel into the real stockpile. Returns what banked.
+# A live return home: merge the satchel into the real stockpile THROUGH the storage cap
+# (VILLAGE_DESIGN P5) — banked loot is the main channel, so it must spill at the ceiling like
+# every other gain. Returns what actually landed (cap-limited), so the summary reads true.
 func bank_satchel() -> Dictionary:
-	var banked: Dictionary = satchel.duplicate()
+	var banked: Dictionary = {}
 	for k in satchel:
-		resources[k] = int(resources.get(k, 0)) + int(satchel[k])
+		var before: int = int(resources.get(k, 0))
+		add_resource(k, int(satchel[k]))
+		banked[k] = int(resources.get(k, 0)) - before
 	satchel = {"wood": 0, "stone": 0, "iron": 0}
-	resources_changed.emit()
 	satchel_changed.emit()
 	return banked
 
@@ -316,11 +372,12 @@ func forfeit_satchel(keep_frac: float = 0.25) -> Dictionary:
 		var have: int = int(satchel.get(k, 0))
 		var save: int = mini(have, remaining)
 		remaining -= save
-		kept[k] = save
-		lost[k] = have - save
-		resources[k] = int(resources.get(k, 0)) + save
+		# Salvage banks through the cap too; anything over the ceiling counts as lost.
+		var before: int = int(resources.get(k, 0))
+		add_resource(k, save)
+		kept[k] = int(resources.get(k, 0)) - before
+		lost[k] = have - kept[k]
 	satchel = {"wood": 0, "stone": 0, "iron": 0}
-	resources_changed.emit()
 	satchel_changed.emit()
 	return {"kept": kept, "lost": lost}
 
@@ -429,14 +486,41 @@ const SAVE_PATH := "user://save.dat"
 func has_save() -> bool:
 	return FileAccess.file_exists(SAVE_PATH)
 
+# Peek the save for the title's Continue affordance (CRITIQUE N5) — run count, roster
+# size, warmth, and when it was written — without loading it over live state. Empty if
+# there is no readable save.
+func save_summary() -> Dictionary:
+	if not FileAccess.file_exists(SAVE_PATH):
+		return {}
+	var f := FileAccess.open(SAVE_PATH, FileAccess.READ)
+	if f == null:
+		return {}
+	var txt := f.get_as_text()
+	f.close()
+	var data: Variant = str_to_var(txt)
+	if not (data is Dictionary):
+		return {}
+	var d: Dictionary = data
+	return {
+		"run_count": int(d.get("run_count", 0)),
+		"rescued": _as_str_array(d.get("rescued", [])).size(),
+		"settlers": int(d.get("settlers", 0)),
+		"gwi": float(d.get("gwi", 0.0)),
+		"saved_at": int(d.get("saved_at", 0)),
+		"won": bool(d.get("won", false)),
+		"deepest_run": int(d.get("deepest_run", 0)),
+	}
+
 func save_game() -> void:
 	var data := {
 		"resources": resources, "rescued": rescued, "settlers": settlers, "grid": grid,
-		"gwi": gwi, "won": won, "run_count": run_count,
+		"gwi": gwi, "won": won, "run_count": run_count, "deepest_run": deepest_run,
 		"village_seeded": village_seeded, "village_radius": village_radius,
 		"tutorial_seen": tutorial_seen, "combat_tutorial_seen": combat_tutorial_seen,
 		"quests": quests, "codex": codex, "codex_read": codex_read, "farm_state": farm_state,
 		"tips_seen": tips_seen, "ruins_found": ruins_found,
+		# When this snapshot was written, so the title's Continue can say how long ago (N5).
+		"saved_at": int(Time.get_unix_time_from_system()),
 	}
 	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if f != null:
@@ -462,6 +546,7 @@ func load_game() -> bool:
 	gwi = float(d.get("gwi", 0.0))
 	won = bool(d.get("won", false))
 	run_count = int(d.get("run_count", 0))
+	deepest_run = int(d.get("deepest_run", 0))
 	village_seeded = bool(d.get("village_seeded", false))
 	village_radius = maxi(2, int(d.get("village_radius", 2)))
 	tutorial_seen = bool(d.get("tutorial_seen", false))
@@ -510,6 +595,7 @@ func reset_all() -> void:
 	gwi = 0.0
 	won = false
 	run_count = 0
+	deepest_run = 0
 	village_seeded = false
 	village_radius = 2
 	tutorial_seen = false

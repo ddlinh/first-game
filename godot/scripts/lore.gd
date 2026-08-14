@@ -20,6 +20,19 @@ const ENTRIES := [
 			+ "is to remember it.",
 	},
 	{
+		# The antagonist's CAUSE (CRITIQUE A-antag). This is the game's fiction, framed
+		# honestly as the Ember's own account — its era marker ("the cold") sets it apart
+		# from the ~BCE real-history entries. It names the cold as entropy/forgetting,
+		# tying the enemy directly to the thesis: warmth (knowledge) is carried or it is lost.
+		"id": "the_long_dark", "title": "The Long Dark", "era": "the cold",
+		"fact": "No comet fell; no god turned away. The world went cold the way any "
+			+ "fire goes cold — one untended moment at a time. A craft left untaught. A "
+			+ "hearth left unlit. Warmth is never kept by wishing it; it is carried, hand "
+			+ "to hand, or it is lost. The Long Dark is only the sum of everything the "
+			+ "living stopped remembering — which is why it is the one enemy that "
+			+ "remembering can undo.",
+	},
+	{
 		"id": "agriculture", "title": "Agriculture", "era": "~10,000 BCE",
 		"fact": "As the last Ice Age ended, people in at least seven regions — the "
 			+ "Fertile Crescent, China, Mesoamerica, the Andes, New Guinea among them — "
@@ -48,6 +61,17 @@ const ENTRIES := [
 			+ "A permanent roof stores labour the way a granary stores grain: build "
 			+ "once, shelter for generations. (Liberty: a timber cabin stands in for the "
 			+ "whole art of durable construction.)",
+	},
+	{
+		# The antagonist's FACE (CRITIQUE A-antag). Unlocked on the first Warden kill, so
+		# the reveal lands in play first (the "it does not bleed" beat) and the Codex then
+		# deepens it. Era "the deep" marks it, like The Long Dark, as the fiction layer.
+		"id": "the_warden", "title": "The Warden", "era": "the deep",
+		"fact": "At the oldest ruin, where the first hearth was let die, the cold learned "
+			+ "a shape and set it to guard the place. The Warden is no beast — strike it "
+			+ "and it does not bleed; it gutters and goes out, like a flame starved of "
+			+ "air. It stands watch over the deep because the dark still fears what was "
+			+ "kindled there once, and might be kindled again.",
 	},
 ]
 

@@ -150,7 +150,7 @@ func toggle_codex() -> void:
 			head += "     ✦ " + Loc.t("new")
 		col.add_child(UiKit.label(head, 16, Palette.GOLD_L if known else Palette.UI_DIM))
 		var body: Label = UiKit.label(
-			String(e.get("fact", "")) if known else "Undiscovered — rescue this craft's survivor, or raise their building.",
+			Loc.t(String(e.get("fact", ""))) if known else Loc.t("Undiscovered — rescue this craft's survivor, or raise their building."),
 			13, Palette.UI_TEXT if known else Palette.UI_DIM)
 		body.autowrap_mode = TextServer.AUTOWRAP_WORD
 		body.custom_minimum_size = Vector2(500, 0)

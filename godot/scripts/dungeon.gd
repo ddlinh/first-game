@@ -465,6 +465,8 @@ func _on_room_cleared(silent: bool = false) -> void:
 	# The Ember speaks the first time the Warden falls (CRITIQUE A5) — one-time, persisted.
 	if node_type == "boss":
 		Main.tip("ember_first_boss", "The brute falls. It was only ever the cold, wearing a shape to frighten you.")
+		# The reveal has landed in play — now recover the Warden's memory so the Codex can deepen it (A-antag).
+		GameState.unlock_codex("the_warden")
 	if hud and hud.has_method("hide_boss"):
 		hud.call("hide_boss")
 	if hud and hud.has_method("set_enemies"):
@@ -680,7 +682,7 @@ class ExitGate extends Node2D:
 			"rest":
 				return {"label": "Hearth", "hint": "rest & recover", "tint": Palette.AMBER, "icon": "ui_flame"}
 			"boss":
-				return {"label": "The Warden", "hint": "a brute guards the deep", "tint": Palette.WINE, "icon": "enemy_brute"}
+				return {"label": "The Warden", "hint": "the deep's guardian — it does not bleed", "tint": Palette.WINE, "icon": "enemy_brute"}
 			_:
 				return {"label": "Combat", "hint": "husks & loot", "tint": Palette.EMBER, "icon": "enemy_husk"}
 

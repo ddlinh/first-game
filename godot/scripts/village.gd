@@ -30,6 +30,10 @@ const BUILDINGS := {
 		"desc": "Tilled soil to grow food — seeds become Provisions that heal mid-run."},
 	"workshop": {"label": "Workshop", "cost": {"wood": 6, "stone": 3}, "tex": "building_workshop", "gwi": 0.14,
 		"desc": "The Carpenter's craft. Sharpens your eye (+Crit) below, and speeds every build."},
+	"granary": {"label": "Granary", "cost": {"wood": 6, "stone": 4}, "tex": "building_granary", "gwi": 0.10,
+		"desc": "A storehouse. Raises how much wood, stone, iron & food you can stockpile before surplus is lost."},
+	"watchtower": {"label": "Watchtower", "cost": {"wood": 5, "stone": 5}, "tex": "building_watchtower", "gwi": 0.08,
+		"desc": "A brazier-topped tower. Wards the village against the cold's return — blunts the cold snaps that sap its warmth."},
 }
 
 # The farm the Farmer establishes (VILLAGE_DESIGN P1). It is NOT a free build: rescuing
@@ -690,7 +694,8 @@ func _add_building_sprite(cell: Vector2i, build_id: String) -> void:
 	var extra: Array = []
 	# Solid buildings get a footprint collider so the hero can't walk through them.
 	# Crop beds stay flat ground you can stand on to plant/harvest.
-	if build_id == "cabin" or build_id == "forge" or build_id == "workshop":
+	if build_id == "cabin" or build_id == "forge" or build_id == "workshop" \
+			or build_id == "granary" or build_id == "watchtower":
 		var body := StaticBody2D.new()
 		body.position = cell_to_world(cell) + Vector2(0.0, 8.0)
 		var cs := CollisionShape2D.new()
@@ -706,7 +711,10 @@ func _add_building_sprite(cell: Vector2i, build_id: String) -> void:
 	var level: int = maxi(1, int(GameState.grid.get(cell, {}).get("level", 1)))
 	_building_roots[cell] = root
 	root.scale = Vector2.ONE * _level_scale(level)
-	if UPGRADABLE.has(build_id):
+	# Every solid structure gets a manage post so a misplaced one is never a permanent,
+	# unwalkable obstacle (CRITIQUE V1). Upgradable ones also offer Upgrade; the Granary and
+	# Watchtower are single-tier, so their post offers only Relocate / Demolish.
+	if UPGRADABLE.has(build_id) or build_id == "granary" or build_id == "watchtower":
 		var mgr := BuildingManager.new()
 		mgr.village = self
 		mgr.cell = cell
@@ -1038,6 +1046,10 @@ func _open_build_menu() -> void:
 		# The Workshop needs the Carpenter (VILLAGE_DESIGN P3): rescue the Builder first —
 		# knowledge carried by people, the same gate the farm uses.
 		if id == "workshop" and not GameState.has_rescued("builder"):
+			continue
+		# Storage and defence are the Builder's craft too (VILLAGE_DESIGN P5/P6) — a
+		# granary and a watchtower need the hands that know how to raise walls.
+		if (id == "granary" or id == "watchtower") and not GameState.has_rescued("builder"):
 			continue
 		var info: Dictionary = BUILDINGS[id]
 		var cost: Dictionary = info["cost"]

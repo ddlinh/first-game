@@ -54,6 +54,8 @@ static func bake(a: Node) -> void:
 	a.put("building_forge", _forge())
 	a.put("building_crop_bed", _crop_bed())
 	a.put("building_workshop", _workshop())
+	a.put("building_granary", _granary())
+	a.put("building_watchtower", _watchtower())
 	a.put("building_scaffold", _scaffold())
 	for i in range(4):
 		a.put("crop_%d" % i, _crop(i))
@@ -703,6 +705,72 @@ static func _cabin() -> Image:
 	Art.shade(im, [Art.s(96, 134, 96, 172, 1.2)], Palette.GOLD_L, 0.3, door, 1.5)
 	Art.dot(im, 116.0, 154.0, 2.0, 2.0, Palette.GOLD_L)
 	Art.shade(im, [Art.e(107, 174, 17, 5)], Palette.INK, 0.45, [], 4.0)
+	return im
+
+
+# The Granary (VILLAGE_DESIGN P5): a stone silo with a conical cap — a tall rounded drum
+# whose silhouette reads apart from the gabled cabin at a glance, with a spill of golden
+# grain at its foot to say "this is where the stockpile lives."
+static func _granary() -> Image:
+	var im := Art.img(160, 180)
+	_ground(im, 80.0, 178.0, 116.0)
+	# Stone drum — the silo body.
+	var body := [Art.rr(80, 132, 33, 44, 15)]
+	Art.paint(im, body, Palette.STONE2, Palette.OUTLINE, B_OW, B_GRAD, [], B_RIM, Palette.GOLD_L)
+	# Barrel curvature: a shaded right flank, a warm rim down the lit left edge.
+	Art.shade(im, [Art.rr(99, 132, 14, 44, 12)], Palette.STONE2_D, 0.5, body, 6.0)
+	Art.shade(im, [Art.s(63, 92, 63, 174, 1.6)], Palette.GOLD_L, 0.22, body, 2.2)
+	# Iron hoop bands.
+	for i in range(3):
+		var hy: float = 106.0 + float(i) * 27.0
+		Art.paint(im, [Art.rr(80, hy, 33, 3, 2)], Palette.WOOD_D, Palette.OUTLINE, B_OW_IN, 0.12, [], 0.4, Palette.GOLD_L)
+	# Conical thatch cap.
+	var cap := [Art.t(80, 56, 43, 92, 117, 92)]
+	Art.paint(im, cap, Palette.ROOF2.lightened(0.16), Palette.OUTLINE, B_OW, B_GRAD, [], 0.55, Palette.GOLD_L)
+	Art.shade(im, [Art.t(80, 56, 80, 92, 117, 92)], Palette.ROOF2_D, 0.5, cap, 1.3)
+	var eave := [Art.rr(80, 92, 39, 3, 2)]
+	Art.paint(im, eave, Palette.ROOF2_D, Palette.OUTLINE, B_OW_IN, 0.1)
+	Art.shade(im, [Art.s(41, 90, 80, 90, 1.0)], Palette.GOLD_L, 0.3, eave, 1.3)
+	# Loading hatch.
+	var hatch := [Art.rr(80, 150, 15, 17, 4)]
+	Art.paint(im, hatch, Palette.WOOD_D, Palette.OUTLINE, B_OW_IN, 0.18, [], 0.4, Palette.GOLD_L)
+	Art.dot(im, 88.0, 150.0, 2.0, 2.0, Palette.GOLD_L)
+	# A spill of golden grain at the foot.
+	Art.shade(im, [Art.e(58, 174, 16, 5)], Palette.INK, 0.4, [], 4.0)
+	Art.paint(im, [Art.e(58, 172, 13, 5)], Palette.AMBER, Palette.OUTLINE, B_OW_IN, 0.14, [], 0.5, Palette.GOLD_L)
+	Art.shade(im, [Art.e(54, 170, 5, 2)], Palette.GOLD_L, 0.4, [], 1.5)
+	return im
+
+
+# The Watchtower (VILLAGE_DESIGN P6): a tall timber frame crowned by a lit brazier — the
+# fire on top is the point, a ward set against the cold's return. Its height and flame make
+# it the one structure that reads as "defence," not shelter.
+static func _watchtower() -> Image:
+	var im := Art.img(160, 180)
+	_ground(im, 80.0, 178.0, 84.0)
+	# Timber shaft — tall and narrow.
+	var shaft := [Art.rr(80, 134, 19, 44, 3)]
+	Art.paint(im, shaft, Palette.WOOD2, Palette.OUTLINE, B_OW, B_GRAD, [], B_RIM, Palette.GOLD_L)
+	Art.shade(im, [Art.rr(91, 134, 8, 44, 3)], Palette.WOOD2_D, 0.5, shaft, 5.0)
+	# Cross-bracing.
+	Art.shade(im, [Art.s(63, 104, 97, 168, 1.5)], Palette.WOOD_D, 0.5, shaft, 1.4)
+	Art.shade(im, [Art.s(97, 104, 63, 168, 1.5)], Palette.WOOD_D, 0.5, shaft, 1.4)
+	# Lookout platform.
+	var plat := [Art.rr(80, 96, 30, 6, 2)]
+	Art.paint(im, plat, Palette.WOOD.lightened(0.14), Palette.OUTLINE, B_OW, B_GRAD, [], 0.5, Palette.GOLD_L)
+	Art.shade(im, [Art.s(52, 98, 108, 98, 1.0)], Palette.WOOD_D, 0.4, plat, 1.3)
+	# Railing.
+	for x: int in [56, 68, 80, 92, 104]:
+		Art.paint(im, [Art.rr(float(x), 86, 2, 10, 1)], Palette.WOOD_D, Palette.OUTLINE, B_OW_IN, 0.14)
+	Art.paint(im, [Art.rr(80, 82, 27, 2, 1)], Palette.WOOD_D, Palette.OUTLINE, B_OW_IN, 0.12)
+	# The brazier fire on top — the ward against the returning cold.
+	var bowl := [Art.rr(80, 78, 8, 4, 2)]
+	Art.paint(im, bowl, Palette.STONE2_D, Palette.OUTLINE, B_OW_IN, 0.2)
+	var flame := [Art.t(80, 54, 72, 78, 88, 78)]
+	Art.paint(im, flame, Palette.EMBER, Palette.OUTLINE, B_OW_IN, 0.1, [], 0.6, Palette.GOLD_L)
+	Art.shade(im, [Art.t(80, 60, 76, 78, 84, 78)], Palette.GOLD_L, 0.6, flame, 1.6)
+	Art.dot(im, 80.0, 62.0, 3.0, 4.0, Palette.AMBER)
+	Art.shade(im, [Art.e(80, 176, 16, 5)], Palette.INK, 0.4, [], 4.0)
 	return im
 
 

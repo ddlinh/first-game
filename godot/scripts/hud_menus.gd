@@ -192,6 +192,18 @@ func show_title() -> void:
 	var sub := UiKit.label("Carry the last ember home.", 18, Palette.AMBER)
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vb.add_child(sub)
+	# A rekindled-world seal on the title once you've won (CRITIQUE N4) — the finisher leaves
+	# a mark on the menu, and the deep-ruins record is shown as the standing challenge.
+	var sm: Dictionary = GameState.save_summary()
+	if bool(sm.get("won", false)):
+		var seal_line := UiKit.label("✦  " + Loc.t("The world you rekindled") + "  ✦", 15, Palette.GOLD_L)
+		seal_line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		vb.add_child(seal_line)
+		var deep: int = int(sm.get("deepest_run", 0))
+		if deep > 0:
+			var rec := UiKit.label(Loc.t("Deepest ruin: %d chambers") % deep, 13, Palette.CYAN)
+			rec.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			vb.add_child(rec)
 	var spacer := Control.new()
 	spacer.custom_minimum_size = Vector2(0, 12)
 	UiKit.ignore(spacer)
@@ -203,6 +215,12 @@ func show_title() -> void:
 		var cb := _big_button("Continue")
 		cb.pressed.connect(_title_continue)
 		vb.add_child(cb)
+		# Context under Continue so a returning player knows what they're loading into,
+		# rather than a bare button (CRITIQUE N5). Reuses the summary peeked above.
+		if not sm.is_empty():
+			var ctx := UiKit.label(_continue_context(sm), 13, Palette.UI_DIM)
+			ctx.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			vb.add_child(ctx)
 	var stb := _big_button("Settings")
 	stb.pressed.connect(show_settings)
 	vb.add_child(stb)
@@ -216,6 +234,33 @@ func _dismiss_title() -> void:
 	if _title_root != null and is_instance_valid(_title_root):
 		_title_root.queue_free()
 		_title_root = null
+
+# One dim line of Continue context (CRITIQUE N5): how far in, who's home, how warm, and
+# when it was last saved — built from a lightweight peek at the save (GameState.save_summary).
+func _continue_context(sm: Dictionary) -> String:
+	var runs: int = int(sm.get("run_count", 0))
+	var rescued: int = int(sm.get("rescued", 0))
+	var warm: int = int(round(clampf(float(sm.get("gwi", 0.0)), 0.0, 1.0) * 100.0))
+	# A save can be written in the village before the first descent (run_count == 0) — say
+	# so, rather than an ordinal-zero "Descent 0" that never happened.
+	var head: String = Loc.t("Not yet descended") if runs <= 0 else (Loc.t("Descent %d") % runs)
+	var line: String = "%s   ·   %s   ·   %s" % [head, Loc.t("%d rescued") % rescued, Loc.t("%d%% warm") % warm]
+	var at: int = int(sm.get("saved_at", 0))
+	if at > 0:
+		line += "   ·   " + _saved_when(at)
+	return line
+
+# A localized "saved N ago" phrase from a unix timestamp (each branch is one whole
+# template, so Vietnamese word order stays natural).
+func _saved_when(unix_ts: int) -> String:
+	var s: int = maxi(0, int(Time.get_unix_time_from_system()) - unix_ts)
+	if s < 90:
+		return Loc.t("saved just now")
+	if s < 3600:
+		return Loc.t("saved %d min ago") % (s / 60)
+	if s < 86400:
+		return Loc.t("saved %d hr ago") % (s / 3600)
+	return Loc.t("saved %d days ago") % (s / 86400)
 
 func _title_new() -> void:
 	# Guard the save: New Game wipes the village, survivors, and warmth (CRITIQUE N1).
@@ -277,6 +322,12 @@ func toggle_pause() -> void:
 	var sb := _big_button("Save Game")
 	sb.pressed.connect(_pause_save)
 	vb.add_child(sb)
+	# Once the world is rekindled, the ending is re-readable from here (CRITIQUE N4) —
+	# the epilogue was a one-shot with no way back to it.
+	if GameState.won:
+		var eb := _big_button("The Ember's Epilogue")
+		eb.pressed.connect(_replay_epilogue)
+		vb.add_child(eb)
 	var setb := _big_button("Settings")
 	setb.pressed.connect(show_settings)
 	vb.add_child(setb)
@@ -290,6 +341,21 @@ func _close_pause() -> void:
 	if _pause_root != null and is_instance_valid(_pause_root):
 		_pause_root.queue_free()
 		_pause_root = null
+
+# Re-open the Ember's epilogue (CRITIQUE N4) — from the pause menu once the world is won.
+# Rebuilds the tally from live state; show_victory re-pauses over the closed pause menu.
+func _replay_epilogue() -> void:
+	_close_pause()
+	var built: int = 0
+	for key in GameState.grid.keys():
+		if bool((GameState.grid[key] as Dictionary).get("built", false)):
+			built += 1
+	show_victory({
+		"runs": GameState.run_count,
+		"rescued": GameState.rescued.size(),
+		"buildings": built,
+		"deepest": GameState.deepest_run,
+	})
 
 func _pause_save() -> void:
 	Main.save_now()
@@ -441,7 +507,7 @@ func show_victory(stats: Dictionary) -> void:
 		"The long dark breaks. Warmth climbs back into the world — and it was you who carried it.",
 		"Rest now, ember-bearer. What you remembered, and rebuilt, will outlast us both.",
 	]:
-		var l := UiKit.label(line, 16, Palette.UI_TEXT)
+		var l := UiKit.label(Loc.t(line), 16, Palette.UI_TEXT)
 		l.autowrap_mode = TextServer.AUTOWRAP_WORD
 		l.custom_minimum_size = Vector2(540, 0)
 		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -454,6 +520,17 @@ func show_victory(stats: Dictionary) -> void:
 	var tl := UiKit.label(tally, 15, Palette.AMBER)
 	tl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vb.add_child(tl)
+	# The post-win destination (CRITIQUE N4): the ruins still run deeper than any light has
+	# reached. Point the finisher somewhere — the endless deep-ruins chase is now open.
+	var deepest: int = maxi(int(stats.get("deepest", GameState.deepest_run)), GameState.deepest_run)
+	var signpost: String = Loc.t("The deep ruins lie open — descend to see how far the dark still goes.")
+	if deepest > 0:
+		signpost += " " + (Loc.t("Deepest reached: %d chambers.") % deepest)
+	var sl := UiKit.label(signpost, 14, Palette.CYAN)
+	sl.autowrap_mode = TextServer.AUTOWRAP_WORD
+	sl.custom_minimum_size = Vector2(540, 0)
+	sl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vb.add_child(sl)
 	var btn := Button.new()
 	btn.text = Loc.t("Keep tending your village  ▸")
 	btn.focus_mode = Control.FOCUS_NONE
@@ -524,6 +601,20 @@ func show_run_summary(data: Dictionary) -> void:
 		vb.add_child(UiKit.label(Loc.t("Salvaged: ") + (kept_str if kept_str != "" else Loc.t("nothing")), 15, Palette.AMBER))
 		var lost_str: String = _loot_str(data.get("lost", {}))
 		vb.add_child(UiKit.label(Loc.t("Lost to the dark: ") + (lost_str if lost_str != "" else Loc.t("nothing")), 14, Palette.UI_DIM))
+	# The village stake (VILLAGE_DESIGN P6): report any cold snap that struck while you were
+	# away — warded off by watchtowers, or a bite out of the village's warmth.
+	var snap: Dictionary = GameState.last_cold_snap
+	if bool(snap.get("hit", false)):
+		var dp: int = int(round(float(snap.get("drop", 0.0)) * 100.0))
+		if bool(snap.get("warded", false)) or dp <= 0:
+			vb.add_child(UiKit.label("❄ " + Loc.t("The watchtowers held the cold at bay."), 14, Palette.MOSS_L))
+		elif int(snap.get("towers", 0)) > 0:
+			vb.add_child(UiKit.label("❄ " + (Loc.t("A cold snap struck — the watchtowers softened it to −%d%% warmth.") % dp), 14, Palette.WINE))
+		else:
+			vb.add_child(UiKit.label("❄ " + (Loc.t("A cold snap struck the village — warmth −%d%%.") % dp), 14, Palette.WINE))
+	# Autosave cue (CRITIQUE N5): returning home banked your progress — say so, right here on
+	# the card the player always sees on a bank/death return, so they know it's safe to stop.
+	vb.add_child(UiKit.label("✓ " + Loc.t("Progress saved"), 13, Palette.CYAN))
 	var sp := Control.new()
 	sp.custom_minimum_size = Vector2(0, 8)
 	UiKit.ignore(sp)

@@ -8,7 +8,10 @@ bridge
 building_cabin
 building_crop_bed
 building_forge
+building_granary
 building_scaffold
+building_watchtower
+building_workshop
 bush
 cage
 crop_0
