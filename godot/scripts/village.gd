@@ -36,6 +36,28 @@ const BUILDINGS := {
 		"desc": "A brazier-topped tower. Wards the village against the cold's return — blunts the cold snaps that sap its warmth."},
 }
 
+# --- M8: player-expression cosmetics (VILLAGE_DESIGN §6) --------------------------------
+# GWI-NEUTRAL decorations, each REMEMBERED by a rescued craft (decoration = knowledge made
+# visible). They grant NO warmth, boons or caps — placing one only dresses the town, so the
+# skyline stays an honest résumé. `gate` is the pillar whose rescue unlocks it ("settlers" =
+# a population has gathered); `line` is the one-time unlock flavour tying it to its craft.
+const DECOR := {
+	"flowerbed":    {"label": "Flower Bed",    "tex": "flowers", "gate": "farmer",   "sh": 0.0,  "sink": 2.0, "wind": true,
+		"line": "Rowan scatters seed along the path — the first colour this ground has held in a long age."},
+	"garden":       {"label": "Kitchen Garden", "tex": "bush",   "gate": "farmer",   "sh": 30.0, "sink": 2.0, "wind": true,
+		"line": "A kitchen garden by the hearth. Rowan plants what a village eats between the harvests."},
+	"drying_rack":  {"label": "Drying Rack",   "tex": "reeds",   "gate": "farmer",   "sh": 22.0, "sink": 2.0, "wind": true,
+		"line": "Cut reeds racked to dry — thatch, mats, winter fodder. Nothing a tended field grows is wasted."},
+	"carved_post":  {"label": "Carved Posts",  "tex": "fence",   "gate": "builder",  "sh": 20.0, "sink": 2.0,
+		"line": "Malin shows the others how to raise a carved post — a boundary you chose, not one the cold drew."},
+	"lantern":      {"label": "Lantern Stand", "tex": "brazier", "gate": "smith",    "sh": 22.0, "sink": 2.0, "light": true,
+		"line": "Bex sets an iron stand for a lantern. Light you can carry, and light you can leave standing."},
+	"banner":       {"label": "Banner",        "tex": "banner",  "gate": "settlers", "sh": 18.0, "sink": 2.0, "wind": true,
+		"line": "Someone hangs a banner over the square. A place worth marking is a place worth staying."},
+	"barrels":      {"label": "Coopered Barrels", "tex": "barrel", "gate": "settlers", "sh": 16.0, "sink": 2.0,
+		"line": "Barrels lined up by the commons — the kind of thing a village bothers to make once there are hands enough to spare for it."},
+}
+
 # The farm the Farmer establishes (VILLAGE_DESIGN P1). It is NOT a free build: rescuing
 # the Farmer lays out this fallow cell from his knowledge, and the hero must supply the
 # materials he lacks to break it into a working farm.
@@ -126,8 +148,16 @@ var _reserved: Dictionary = {}
 
 # --- Build placement state ---
 var _placing: bool = false          # true while a ghost is following the cursor
-var _place_id: String = ""          # which building the ghost represents
+var _place_id: String = ""          # which building (or decoration) the ghost represents
 var _ghost: Sprite2D = null         # translucent preview sprite
+# M8 placement modes: the same ghost cursor serves buildings, path-painting and decorations.
+var _place_kind: String = "build"   # "build" | "path" | "decor"
+var _place_orient: int = 1          # ghost facing: +1 default, -1 mirrored (flip_h)
+var _last_paint_cell: Vector2i = NO_CELL   # last cell the held drag painted/toggled, so a
+                                           # toggle-OFF isn't instantly re-added while held
+var _paths_root: Node2D = null      # holds the laid path-tile overlays
+var _decor_root: Node2D = null      # holds the placed decoration props
+var _decor_nodes: Dictionary = {}   # cell -> prop root node, so a decoration can be removed
 
 # --- Warmth (GWI) visible-thaw handles, updated on gwi_changed (QA F-23) ---
 var _bonfire_root: Node2D = null           # the hearth prop, so its flame can grow
@@ -509,6 +539,9 @@ func _seed_and_rebuild() -> void:
 				_spawn_crop_plot(cell)
 		else:
 			_spawn_scaffold(cell, btype)
+	# M8: restore the saved cosmetic layer (paths + decorations) over the rebuilt town.
+	_render_paths()
+	_render_decor_props()
 
 # The rescue payoff: every survivor brought home lives in the village — wandering,
 # working, and offering a quest. Reads GameState.rescued (populated in the dungeon).
@@ -739,6 +772,9 @@ func _add_building_sprite(cell: Vector2i, build_id: String) -> void:
 	# Feet-anchored + contact-shadowed like every other prop, so structures sit ON
 	# the ground and y-sort by their base instead of floating as stickers (QA F-21).
 	var root: Node2D = Iso.prop(self, tex_key, cell_to_world(cell), 42.0, 2.0)
+	# M8: face the direction the player chose when placing it (mirror the body only).
+	if int(GameState.grid.get(cell, {}).get("orient", 1)) < 0:
+		_flip_body(root, tex_key)
 	# Finished buildings visibly work: a warm hearth-light so the village reads as
 	# lived-in rather than a field of inert props (QA F-22).
 	if build_id == "forge":
@@ -884,6 +920,11 @@ func open_manage_menu(cell: Vector2i, build_id: String) -> void:
 		"cost": {}, "affordable": true, "tex": tex,
 		"desc": Loc.t("Pick it up and set it on a new tile — no materials lost."), "warm": 0.0,
 	})
+	entries.append({
+		"id": "mng_rotate", "label": "%s: %s" % [Loc.t("Turn"), Loc.t(label)],
+		"cost": {}, "affordable": true, "tex": tex,
+		"desc": Loc.t("Face it the other way — looks only, no change to its warmth."), "warm": 0.0,
+	})
 	var salvage: String = _cost_str(_salvage_for(cell, build_id))
 	entries.append({
 		"id": "mng_demolish", "label": "%s: %s" % [Loc.t("Demolish"), Loc.t(label)],
@@ -953,6 +994,10 @@ func _start_relocate(cell: Vector2i, build_id: String) -> void:
 	_relocate_from = cell
 	_relocate_level = maxi(1, int(GameState.grid.get(cell, {}).get("level", 1)))
 	_enter_placement(build_id)
+	# Carry the building's current facing into the relocate ghost.
+	_place_orient = int(GameState.grid.get(cell, {}).get("orient", 1))
+	if _ghost:
+		_ghost.flip_h = _place_orient < 0
 
 # A repeating puff of smoke/sparks from a finished building, re-arming itself so the
 # chimney keeps breathing (cabin) and the forge keeps sparking — the little signs of
@@ -1038,6 +1083,14 @@ func _unhandled_input(event: InputEvent) -> void:
 		if _placing:
 			_exit_placement()
 		return
+	# M8: flip the facing of the building/decoration being placed (paths have no facing).
+	if event.is_action_pressed("rotate"):
+		if _placing and _place_kind != "path":
+			_place_orient = -_place_orient
+			if _ghost:
+				_ghost.flip_h = _place_orient < 0
+			get_viewport().set_input_as_handled()
+		return
 	if event.is_action_pressed("attack"):
 		if _placing:
 			_try_place()
@@ -1077,23 +1130,24 @@ func _process(delta: float) -> void:
 		_place_cell = world_to_cell(to_local(mpx))
 	var cell: Vector2i = _place_cell
 	_ghost.position = cell_to_world(cell)
-	var ok: bool = _cell_free(cell)
+	if _place_kind != "path":
+		_ghost.flip_h = _place_orient < 0
+	var ok: bool = _place_valid_here(cell)
 	_ghost.modulate = Color(1.0, 1.0, 1.0, 0.55) if ok else Color(1.0, 0.35, 0.3, 0.55)
+	# Path mode paints continuously while the place button is held, so a run of tiles
+	# lays in one drag instead of one click per cell — but only onto a NEW cell, so a
+	# click that toggled a tile OFF isn't instantly re-added while the button stays down.
+	if _place_kind == "path" and ok and Input.is_action_pressed("attack") and cell != _last_paint_cell:
+		_lay_path(cell)
+		_last_paint_cell = cell
 	# The build grid + hovered-cell box so placement has a visible target (QA F-20).
 	if _place_guide != null and is_instance_valid(_place_guide):
 		_place_guide.hover = cell
 		_place_guide.valid = ok
 		_place_guide.queue_redraw()
-	# Live, honest warmth readout for THIS tile (CRITIQUE V2/V3): a build warms the world
-	# more the closer it stands to the hearth.
+	# Contextual placement hint per mode (warmth readout for builds; plain cues for cosmetics).
 	if hud and hud.has_method("place_hint"):
-		if _relocate_from != NO_CELL:
-			hud.call("place_hint", Loc.t("Relocating — pick a tended tile   ·   Esc to cancel"))
-		elif ok:
-			var w: float = _predicted_warmth(_place_id, cell)
-			hud.call("place_hint", Loc.t("Warmth here: +%d%%   ·   closer to the hearth is warmer   ·   Esc to cancel") % int(round(w * 100.0)))
-		else:
-			hud.call("place_hint", Loc.t("Blocked tile — pick a bright, empty one   ·   Esc to cancel"))
+		hud.call("place_hint", _place_hint_text(cell, ok))
 
 func _open_build_menu() -> void:
 	if _placing or hud == null:
@@ -1138,6 +1192,22 @@ func _open_build_menu() -> void:
 			"desc": "Tend one more ring of wild land so you can build farther out.",
 			"warm": 0.0,
 		})
+	# M8 — make the town yours: laying paths is always available; craft-gated decorations
+	# appear as their craft is remembered. Every one is GWI-NEUTRAL (cost + warmth are 0),
+	# so the skyline stays an honest résumé of what you actually built.
+	entries.append({
+		"id": "paths", "label": "Lay Paths", "cost": {}, "affordable": true,
+		"tex": "tile_path", "desc": "Paint dirt paths between your buildings — purely for looks, no warmth.", "warm": 0.0,
+	})
+	for did in DECOR.keys():
+		if not _decor_unlocked(did):
+			continue
+		var dinfo: Dictionary = DECOR[did]
+		entries.append({
+			"id": "decor:" + did, "label": String(dinfo["label"]), "cost": {}, "affordable": true,
+			"tex": String(dinfo["tex"]), "desc": "Decoration — dresses the town, adds no warmth.", "warm": 0.0,
+		})
+	Main.tip("m8_expression", "Press R to turn a building or decoration as you place it. 'Lay Paths' and the craft decorations are pure looks — they make the town yours without changing its warmth.")
 	hud.open_build_menu(entries)
 
 # Expansion cost climbs with how much land you've already tended.
@@ -1156,10 +1226,15 @@ func _on_build_selected(id: String) -> void:
 		match id:
 			"mng_upgrade":  _upgrade_building(cell, bid)
 			"mng_relocate": _start_relocate(cell, bid)
+			"mng_rotate":   _rotate_building(cell, bid)
 			"mng_demolish": _demolish_building(cell, bid)
 		return
 	if id == "expand":
 		_expand()
+	elif id == "paths":
+		_enter_path_mode()
+	elif id.begins_with("decor:"):
+		_enter_decor_placement(id.substr(6))
 	else:
 		_enter_placement(id)
 
@@ -1193,6 +1268,8 @@ func _enter_placement(id: String) -> void:
 	if not BUILDINGS.has(id):
 		return
 	_placing = true
+	_place_kind = "build"
+	_place_orient = 1
 	_place_id = id
 	if hud:
 		hud.close_build_menu()
@@ -1203,6 +1280,7 @@ func _enter_placement(id: String) -> void:
 		add_child(_ghost)
 	_ghost.texture = Assets.tex(String(info["tex"]))
 	_ghost.scale = Vector2(Palette.PX, Palette.PX)
+	_ghost.flip_h = false
 	_ghost.modulate = Color(1.0, 1.0, 1.0, 0.55)
 	_ghost.visible = true
 	# Start the ghost where the mouse is (or fall back to the player's cell), and re-arm
@@ -1224,11 +1302,15 @@ func _enter_placement(id: String) -> void:
 
 func _exit_placement() -> void:
 	_placing = false
+	_place_kind = "build"
+	_place_orient = 1
 	_place_id = ""
+	_last_paint_cell = NO_CELL
 	_relocate_from = NO_CELL
 	_relocate_level = 1
 	if _ghost:
 		_ghost.visible = false
+		_ghost.flip_h = false
 	if hud and hud.has_method("hide_place_banner"):
 		hud.call("hide_place_banner")
 	if _place_guide != null and is_instance_valid(_place_guide):
@@ -1241,17 +1323,30 @@ func _try_place() -> void:
 	if not _placing:
 		return
 	var cell: Vector2i = _place_cell
+	# M8 cosmetic modes stay ACTIVE after each action, so a player can lay a whole path or
+	# a row of decorations without reopening the menu (Esc leaves the mode).
+	if _place_kind == "path":
+		if _path_ok(cell):
+			_toggle_path(cell)
+			_last_paint_cell = cell   # this press "owns" the cell — the held drag won't re-add it
+		return
+	if _place_kind == "decor":
+		if _decor_ok(cell) or _decor_nodes.has(cell):
+			_place_decor_at(cell)
+		return
+	# --- Buildings (and relocation) ---
 	if not _cell_free(cell):
 		return  # only land on empty in-bounds cells; keep placing otherwise
-	# Relocating a finished building: no cost, carry its tier, tear down the original now
-	# that a valid destination is confirmed (cancelling earlier would have kept it).
+	# Relocating a finished building: no cost, carry its tier + facing, tear down the
+	# original now that a valid destination is confirmed (cancelling earlier kept it).
 	if _relocate_from != NO_CELL:
 		var bid: String = _place_id
 		var lvl: int = _relocate_level
+		var ori: int = _place_orient
 		var from: Vector2i = _relocate_from
 		_exit_placement()
 		_tear_down(from)
-		GameState.grid[cell] = {"type": bid, "built": true, "level": lvl}
+		GameState.grid[cell] = {"type": bid, "built": true, "level": lvl, "orient": ori}
 		_add_building_sprite(cell, bid)
 		Vfx.embers(self, cell_to_world(cell), 14, Palette.GOLD)
 		Sfx.play("build", -5.0)
@@ -1266,10 +1361,257 @@ func _try_place() -> void:
 			hud.toast("Not enough materials", Palette.BLOOD)
 		return
 	GameState.spend(cost)
-	GameState.grid[cell] = {"type": _place_id, "built": false, "level": 1}
+	GameState.grid[cell] = {"type": _place_id, "built": false, "level": 1, "orient": _place_orient}
 	_spawn_scaffold(cell, _place_id)
 	_exit_placement()
 	Main.tip("hammer", "That's a frame. Stand beside it and tap E a few times to hammer it up.")
+
+# ===========================================================================
+# M8 — player expression: rotation, paths, decorations (VILLAGE_DESIGN §6). Every
+# function here is GWI-NEUTRAL — cosmetics never touch warmth, boons or caps.
+# ===========================================================================
+
+# True inside the tended clearing (Chebyshev radius from the hearth).
+func _in_clearing(cell: Vector2i) -> bool:
+	return maxi(absi(cell.x - CENTER.x), absi(cell.y - CENTER.y)) <= GameState.village_radius
+
+# Mirror a prop's BODY sprite (its facing) by matching its texture, so the shadow, lights
+# and smoke puffs are left untouched (a building can carry particle Sprite2Ds too).
+func _flip_body(root: Node2D, tex_key: String, flipped: bool = true) -> void:
+	if not is_instance_valid(root):
+		return
+	var want: Texture2D = Assets.tex(tex_key)
+	for c in root.get_children():
+		if c is Sprite2D and (c as Sprite2D).texture == want:
+			(c as Sprite2D).flip_h = flipped
+			return
+
+# Per-mode validity of the hovered cell (drives the ghost tint + whether a click acts).
+func _place_valid_here(cell: Vector2i) -> bool:
+	match _place_kind:
+		"path":  return _path_ok(cell)
+		"decor": return _decor_ok(cell) or _decor_nodes.has(cell)
+		_:       return _cell_free(cell)
+
+# Per-mode placement hint shown under the cursor.
+func _place_hint_text(cell: Vector2i, ok: bool) -> String:
+	if _place_kind == "path":
+		return Loc.t("Paint paths — click or drag tended tiles   ·   Esc when done")
+	if _place_kind == "decor":
+		if _decor_nodes.has(cell):
+			return Loc.t("Click to pick this decoration back up   ·   Esc when done")
+		return Loc.t("Place a decoration — looks only   ·   R turns it   ·   Esc when done") if ok \
+			else Loc.t("Can't decorate here — pick a tended, empty tile   ·   Esc when done")
+	if _relocate_from != NO_CELL:
+		return Loc.t("Relocating — pick a tended tile   ·   R turns it   ·   Esc to cancel")
+	if ok:
+		return Loc.t("Warmth here: +%d%%   ·   closer to the hearth is warmer   ·   R turns it   ·   Esc to cancel") \
+			% int(round(_predicted_warmth(_place_id, cell) * 100.0))
+	return Loc.t("Blocked tile — pick a bright, empty one   ·   Esc to cancel")
+
+# --- Rotation ---------------------------------------------------------------
+# Flip an already-standing building's facing in place (manage-menu "Turn").
+func _rotate_building(cell: Vector2i, build_id: String) -> void:
+	if not GameState.grid.has(cell):
+		return
+	var d: Dictionary = GameState.grid[cell]
+	d["orient"] = -int(d.get("orient", 1))
+	GameState.grid[cell] = d
+	var root: Variant = _building_roots.get(cell)
+	if root != null and is_instance_valid(root):
+		_flip_body(root, String(BUILDINGS.get(build_id, {}).get("tex", "")), int(d["orient"]) < 0)
+	Sfx.play("build", -8.0)
+	if hud:
+		hud.toast(Loc.t("%s turned") % Loc.t(String(BUILDINGS.get(build_id, {}).get("label", build_id))), Palette.MOSS_L)
+
+# --- Paths ------------------------------------------------------------------
+func _enter_path_mode() -> void:
+	_placing = true
+	_place_kind = "path"
+	_place_id = ""
+	_last_paint_cell = NO_CELL
+	if hud:
+		hud.close_build_menu()
+	if _ghost == null:
+		_ghost = Sprite2D.new()
+		_ghost.z_index = 30
+		add_child(_ghost)
+	_ghost.texture = Assets.tex("tile_path")
+	_ghost.scale = Vector2(Palette.TILE_SX, Palette.TILE_SY)
+	_ghost.flip_h = false
+	_ghost.modulate = Color(1.0, 1.0, 1.0, 0.55)
+	_ghost.visible = true
+	_place_mouse_px = get_global_mouse_position()
+	_place_cell = world_to_cell(to_local(_place_mouse_px))
+	if hud and hud.has_method("show_place_banner"):
+		hud.call("show_place_banner", Loc.t("Lay Paths"), {}, "build")
+	if _place_guide == null or not is_instance_valid(_place_guide):
+		_place_guide = PlaceGuide.new()
+		_place_guide.village = self
+		add_child(_place_guide)
+	_place_guide.visible = true
+	_place_guide.queue_redraw()
+
+func _path_ok(cell: Vector2i) -> bool:
+	# Same legality as decorations: a tended tile off the stream, off the reserved civic
+	# square / town-lots, and off any occupied building footprint (a path under a building
+	# only pokes out around its base).
+	return _in_clearing(cell) and not _river_cells.has(cell) \
+		and not _reserved.has(cell) and not GameState.grid.has(cell)
+
+func _toggle_path(cell: Vector2i) -> void:
+	var paths: Array = GameState.decor.get("paths", [])
+	var idx: int = -1
+	for i in paths.size():
+		if Vector2i(paths[i]) == cell:
+			idx = i
+			break
+	if idx >= 0:
+		paths.remove_at(idx)
+		_render_paths()   # a removal needs the full redraw
+	else:
+		paths.append(cell)
+		_add_path_tile(cell)
+	GameState.decor["paths"] = paths
+	Sfx.play("build", -11.0, 1.1)
+
+func _lay_path(cell: Vector2i) -> void:
+	# Drag-add only — never removes, so a held drag paints a continuous run.
+	var paths: Array = GameState.decor.get("paths", [])
+	for p in paths:
+		if Vector2i(p) == cell:
+			return
+	paths.append(cell)
+	GameState.decor["paths"] = paths
+	_add_path_tile(cell)
+
+func _add_path_tile(cell: Vector2i) -> void:
+	if _paths_root == null or not is_instance_valid(_paths_root):
+		_paths_root = Node2D.new()
+		add_child(_paths_root)
+	var s := Sprite2D.new()
+	s.texture = Assets.tex("tile_path")
+	s.scale = Vector2(Palette.TILE_SX, Palette.TILE_SY)
+	s.position = cell_to_world(cell)
+	s.z_index = -9   # over the base ground (-10), under props and actors (0)
+	_paths_root.add_child(s)
+
+func _render_paths() -> void:
+	if _paths_root != null and is_instance_valid(_paths_root):
+		_paths_root.queue_free()
+	_paths_root = Node2D.new()
+	add_child(_paths_root)
+	for p in GameState.decor.get("paths", []):
+		_add_path_tile(Vector2i(p))
+
+# --- Decorations ------------------------------------------------------------
+func _decor_unlocked(did: String) -> bool:
+	var gate: String = String(DECOR.get(did, {}).get("gate", ""))
+	if gate == "settlers":
+		return GameState.settlers > 0
+	return GameState.has_rescued(gate)
+
+func _enter_decor_placement(id: String) -> void:
+	if not DECOR.has(id):
+		return
+	_placing = true
+	_place_kind = "decor"
+	_place_orient = 1
+	_place_id = id
+	if hud:
+		hud.close_build_menu()
+	var info: Dictionary = DECOR[id]
+	if _ghost == null:
+		_ghost = Sprite2D.new()
+		_ghost.z_index = 30
+		add_child(_ghost)
+	_ghost.texture = Assets.tex(String(info["tex"]))
+	_ghost.scale = Vector2(Palette.PX, Palette.PX)
+	_ghost.flip_h = false
+	_ghost.modulate = Color(1.0, 1.0, 1.0, 0.55)
+	_ghost.visible = true
+	_place_mouse_px = get_global_mouse_position()
+	_place_cell = world_to_cell(to_local(_place_mouse_px))
+	if hud and hud.has_method("show_place_banner"):
+		hud.call("show_place_banner", Loc.t(String(info["label"])), {}, "build")
+	if _place_guide == null or not is_instance_valid(_place_guide):
+		_place_guide = PlaceGuide.new()
+		_place_guide.village = self
+		add_child(_place_guide)
+	_place_guide.visible = true
+	_place_guide.queue_redraw()
+
+func _decor_ok(cell: Vector2i) -> bool:
+	if _river_cells.has(cell) or _reserved.has(cell):
+		return false
+	if not _in_clearing(cell):
+		return false
+	if GameState.grid.has(cell):
+		return false
+	return not _decor_nodes.has(cell)
+
+func _place_decor_at(cell: Vector2i) -> void:
+	# Toggle: a decoration already here is picked back up; otherwise place the current one.
+	if _decor_nodes.has(cell):
+		_remove_decor(cell)
+		Sfx.play("build", -9.0, 1.1)
+		return
+	if not _decor_ok(cell):
+		return
+	var props: Array = GameState.decor.get("props", [])
+	props.append({"id": _place_id, "cell": cell, "orient": _place_orient})
+	GameState.decor["props"] = props
+	_spawn_decor_prop(_place_id, cell, _place_orient)
+	Vfx.embers(self, cell_to_world(cell), 8, Palette.GOLD_L)
+	Sfx.play("build", -7.0, 1.05)
+	# One-time unlock flavour tying the cosmetic to the craft that remembered it.
+	var line: String = String(DECOR.get(_place_id, {}).get("line", ""))
+	if line != "":
+		Main.tip("decor_" + _place_id, line)
+
+func _remove_decor(cell: Vector2i) -> void:
+	var node: Variant = _decor_nodes.get(cell)
+	if node != null and is_instance_valid(node):
+		(node as Node).queue_free()
+	_decor_nodes.erase(cell)
+	var props: Array = GameState.decor.get("props", [])
+	for i in range(props.size() - 1, -1, -1):
+		if Vector2i((props[i] as Dictionary).get("cell", NO_CELL)) == cell:
+			props.remove_at(i)
+	GameState.decor["props"] = props
+
+func _spawn_decor_prop(id: String, cell: Vector2i, orient: int) -> void:
+	var info: Dictionary = DECOR.get(id, {})
+	if info.is_empty() or cell == NO_CELL:
+		return
+	# Defensive: never orphan a node if this cell already holds one (e.g. a corrupted save
+	# with two props on a cell) — free the old before _decor_nodes[cell] is overwritten below.
+	if _decor_nodes.has(cell) and is_instance_valid(_decor_nodes[cell]):
+		(_decor_nodes[cell] as Node).queue_free()
+	if _decor_root == null or not is_instance_valid(_decor_root):
+		_decor_root = Node2D.new()
+		add_child(_decor_root)
+	var root: Node2D = Iso.prop(_decor_root, String(info["tex"]), cell_to_world(cell),
+		float(info.get("sh", 18.0)), float(info.get("sink", 2.0)))
+	if orient < 0:
+		_flip_body(root, String(info["tex"]), true)
+	if bool(info.get("wind", false)):
+		_windify(root)
+	if bool(info.get("light", false)):
+		var l: PointLight2D = Iso.light(root, Palette.TORCH, 58.0, 0.5)
+		l.position = Vector2(0.0, -14.0)
+		Iso.flicker(l, 0.5, 0.2, 0.12)
+	_decor_nodes[cell] = root
+
+func _render_decor_props() -> void:
+	if _decor_root != null and is_instance_valid(_decor_root):
+		_decor_root.queue_free()
+	_decor_root = Node2D.new()
+	add_child(_decor_root)
+	_decor_nodes.clear()
+	for p in GameState.decor.get("props", []):
+		var pd: Dictionary = p
+		_spawn_decor_prop(String(pd.get("id", "")), Vector2i(pd.get("cell", NO_CELL)), int(pd.get("orient", 1)))
 
 # ===========================================================================
 # Inner classes (used only by the Village)

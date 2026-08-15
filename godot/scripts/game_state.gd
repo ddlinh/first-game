@@ -54,11 +54,34 @@ const ATTUNEMENTS := {
 # rescue moment and the villager they become. Proper nouns, so they stay untranslated.
 const SURVIVOR_NAMES := {"farmer": "Rowan", "smith": "Bex", "builder": "Malin"}
 
+# One line of WHO each survivor is — the person behind the craft (people are the reward,
+# VISION / CRITIQUE A2). The rescue moment gives their reactive line (Survivor.LINES); this
+# is the quieter characterisation, read at leisure beside their attunement on the character
+# sheet. Kept in the Ember's register so the roster reads as lives carried home, not stats.
+const SURVIVOR_LORE := {
+	"farmer": "Rowan kept the seed-vault through the long winters. He planted the last handful rather than eat it — that is the whole of him.",
+	"smith": "Bex learned the forge from her mother, who learned it from hers. She reads a fire's colour the way you read a face.",
+	"builder": "Malin raised half this village the first time. She still walks the old foundations at night, naming rooms that aren't there yet.",
+}
+
 func survivor_name(p: String) -> String:
 	return String(SURVIVOR_NAMES.get(p, p.capitalize()))
 
-# Village grid: Vector2i(cell) -> {"type": String, "built": bool}
+func survivor_lore(p: String) -> String:
+	return String(SURVIVOR_LORE.get(p, ""))
+
+# Village grid: Vector2i(cell) -> {"type": String, "built": bool, "level": int, "orient": int}
+# `orient` (M8) is the building's facing: +1 default, -1 mirrored (flip_h). Old saves and
+# freshly-placed entries without the key read as +1.
 var grid: Dictionary = {}
+
+# Player-expression cosmetic layer (M8 / VILLAGE_DESIGN §6): a GWI-NEUTRAL sibling of `grid`.
+# `paths` is the set of cells with a laid path tile; `props` is the placed craft-gated
+# decorations. NOTHING here grants warmth, boons, or caps — it only dresses the town, so
+# the skyline stays an honest résumé. Serialised with the save (Vector2i round-trips).
+#   paths: Array[Vector2i]
+#   props: Array[{ "id": String, "cell": Vector2i, "orient": int }]
+var decor: Dictionary = {"paths": [], "props": []}
 
 var gwi: float = 0.0   # 0.0 (cold ash) .. 1.0 (full ember radiance)
 var won: bool = false  # has the world fully rekindled? (win fires once, CRITIQUE B4)
@@ -134,6 +157,7 @@ func _setup_input() -> void:
 	_key_action("character", [KEY_C])   # toggle the character / progression panel
 	_key_action("codex", [KEY_K])       # toggle the knowledge Codex ("the Ember's memories")
 	_key_action("lang", [KEY_L])        # cycle the UI language (English / Tiếng Việt)
+	_key_action("rotate", [KEY_R])      # flip a building/decoration's facing while placing it (M8)
 	# Combat is on the mouse: left swings, right guards.
 	_mouse_action("attack", MOUSE_BUTTON_LEFT)
 	_mouse_action("defend", MOUSE_BUTTON_RIGHT)
@@ -518,7 +542,7 @@ func save_game() -> void:
 		"village_seeded": village_seeded, "village_radius": village_radius,
 		"tutorial_seen": tutorial_seen, "combat_tutorial_seen": combat_tutorial_seen,
 		"quests": quests, "codex": codex, "codex_read": codex_read, "farm_state": farm_state,
-		"tips_seen": tips_seen, "ruins_found": ruins_found,
+		"tips_seen": tips_seen, "ruins_found": ruins_found, "decor": decor,
 		# When this snapshot was written, so the title's Continue can say how long ago (N5).
 		"saved_at": int(Time.get_unix_time_from_system()),
 	}
@@ -557,6 +581,7 @@ func load_game() -> bool:
 	ruins_found = _as_int_array(d.get("ruins_found", []))
 	farm_state = String(d.get("farm_state", "none"))
 	tips_seen = d.get("tips_seen", {})
+	decor = _coerce_decor(d.get("decor", {}))
 	# Re-announce loaded state so the HUD repaints (safe if listeners aren't wired yet).
 	resources_changed.emit()
 	roster_changed.emit()
@@ -584,6 +609,17 @@ func _as_int_array(a: Variant) -> Array[int]:
 			out.append(int(x))
 	return out
 
+# Coerce a loaded decor blob into the {paths:[], props:[]} shape — old saves lack the key,
+# so a missing/garbled value degrades to an empty, valid cosmetic layer (M8).
+func _coerce_decor(v: Variant) -> Dictionary:
+	var out: Dictionary = {"paths": [], "props": []}
+	if v is Dictionary:
+		if (v as Dictionary).get("paths") is Array:
+			out["paths"] = ((v as Dictionary)["paths"] as Array).duplicate()
+		if (v as Dictionary).get("props") is Array:
+			out["props"] = ((v as Dictionary)["props"] as Array).duplicate()
+	return out
+
 # Wipe all meta-progression back to a fresh start (New Game).
 func reset_all() -> void:
 	resources = {"wood": 6, "stone": 3, "iron": 0, "food": 0, "seeds": 3}
@@ -592,6 +628,7 @@ func reset_all() -> void:
 	rescued = [] as Array[String]
 	settlers = 0
 	grid = {}
+	decor = {"paths": [], "props": []}
 	gwi = 0.0
 	won = false
 	run_count = 0

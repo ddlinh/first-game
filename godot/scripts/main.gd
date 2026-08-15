@@ -401,6 +401,12 @@ func _install_layer(layer: Node2D, is_dungeon: bool, fresh_run: bool = true) -> 
 					_player.apply_buff(b)
 			# The village you rebuilt strengthens the descent (QA D-02).
 			_apply_village_boons()
+			# The Ember opens the descent on the Ash line when you begin on bare rock
+			# (STORY_DESIGN §3; the higher stages' lines fire on the Bloom that first
+			# reaches them). Once ever — a warm, populated world seeds a higher start and
+			# skips it. tip() dedups on the shared "succession_0" key.
+			if int(_player.get("kindle_stage")) <= 0 and _hud != null and _hud.has_method("tip"):
+				_hud.tip("succession_0", String(Player.STAGE_FLAVOR[0]))
 		else:
 			# A deeper room carries hp + loot + succession forward, but scrubs
 			# transient motion/combat state so it can't leak into the next arena.
@@ -522,14 +528,18 @@ func _apply_dungeon_grade() -> void:
 # ---------------------------------------------------------------------------
 var _boon_queue: Array = []
 var _boon_active: bool = false
-# The stage of the most recent Bloom, surfaced as an A7 succession-flavor tip once the
-# boon draft fully closes (so it isn't drawn behind the overlay and consumed unread).
-var _pending_succession: int = -1
+# The stages of Blooms that landed since the boon overlay last closed, surfaced as A7
+# succession-flavor tips once the draft fully closes (so they aren't drawn behind the
+# overlay and consumed unread). A QUEUE, not a scalar: one big Kindle bounty can cross
+# several thresholds at once (bloomed fires once per stage), and the single tip slot shows
+# one line at a time — so we show them in turn instead of clobbering all but the last.
+var _pending_succession: Array[int] = []
+const SUCCESSION_TIP_GAP := 6.6   # seconds a tip is on screen before the next may show
 
-# A Bloom just landed (fires just before its boon offer). Remember the stage; the flavor
-# line is shown when the draft closes, in _show_next_boon.
+# A Bloom just landed (fires just before its boon offer). Queue the stage; its flavor line
+# is shown when the draft closes, in _show_next_boon → _flush_succession_tip.
 func _on_bloomed(stage: int) -> void:
-	_pending_succession = stage
+	_pending_succession.append(stage)
 
 func _on_boon_offer(cards: Array) -> void:
 	_boon_queue.append(cards)
@@ -557,15 +567,24 @@ func _on_boon_picked(id: String) -> void:
 		_player.apply_boon(id)
 	_show_next_boon()
 
-# Surface the pending succession-flavor line (A7) now that the boon overlay is gone and
-# the world is unpaused — tip() localizes it and shows it once ever per stage.
+# Surface the queued succession-flavor lines (A7) now the boon overlay is gone and the
+# world is unpaused — tip() localizes each and shows it once ever per stage. The tip slot
+# holds one line at a time, so show the next unshown stage and, if more remain, re-flush
+# after it has had its moment — a multi-stage Bloom then reads each stage in order.
 func _flush_succession_tip() -> void:
-	var s: int = _pending_succession
-	_pending_succession = -1
-	if s < 0 or _hud == null or not _hud.has_method("tip"):
+	if _hud == null or not _hud.has_method("tip"):
+		_pending_succession.clear()
 		return
-	if s < Player.STAGE_FLAVOR.size() and String(Player.STAGE_FLAVOR[s]) != "":
+	while not _pending_succession.is_empty():
+		var s: int = int(_pending_succession.pop_front())
+		if s < 0 or s >= Player.STAGE_FLAVOR.size() or String(Player.STAGE_FLAVOR[s]) == "":
+			continue
+		if GameState.tips_seen.has("succession_%d" % s):
+			continue   # already read on an earlier run — skip to the next unseen stage
 		_hud.tip("succession_%d" % s, String(Player.STAGE_FLAVOR[s]))
+		if not _pending_succession.is_empty():
+			get_tree().create_timer(SUCCESSION_TIP_GAP).timeout.connect(_flush_succession_tip)
+		return
 
 # Player hp is the one gameplay event the camera reacts to; routing it here keeps
 # the juice out of Player, which does not know a camera exists.

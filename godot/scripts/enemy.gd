@@ -184,7 +184,7 @@ func _physics_process(delta: float) -> void:
 		velocity = Vector2.ZERO
 		move_and_slide()
 		if _stun_t <= 0.0 and _sprite != null:
-			_sprite.modulate = _base_tint
+			_sprite.modulate = _rest_tint()
 		return
 	var player: Node2D = get_tree().get_first_node_in_group("player") as Node2D
 	if player == null or not is_instance_valid(player):
@@ -581,6 +581,14 @@ func _die(from_dir: Vector2) -> void:
 		_zone_shown = false
 		_danger.queue_redraw()
 	died.emit(global_position)
+	if _flash_tw != null and _flash_tw.is_valid():
+		_flash_tw.kill()
+	# A Warden does not die — it GUTTERS. The cold loses the last of its hold and what it
+	# was guarding is relit: no crunch, no ash, no corpse — it settles into a warm glow and
+	# goes out like a flame let go (STORY_DESIGN §3, "a warm, settling glow, not a corpse").
+	if kind == "warden":
+		_gutter_out()
+		return
 	Vfx.crunch(get_parent(), global_position + Vector2(0.0, -30.0 * Palette.ACTOR_SCALE), from_dir)
 	Vfx.embers(get_parent(), global_position, 10, Palette.SHADOW.lightened(0.12))
 	Vfx.hitstop(self, 0.045)
@@ -589,8 +597,6 @@ func _die(from_dir: Vector2) -> void:
 	if _sprite == null:
 		queue_free()
 		return
-	if _flash_tw != null and _flash_tw.is_valid():
-		_flash_tw.kill()
 	_sprite.modulate = Palette.WHITE
 	var tw := create_tween()
 	tw.tween_property(_sprite, "modulate", Palette.SHADOW_D.darkened(0.2), 0.10)
@@ -600,7 +606,34 @@ func _die(from_dir: Vector2) -> void:
 	tw.parallel().tween_property(_sprite, "modulate:a", 0.0, 0.24).set_delay(0.06)
 	tw.tween_callback(queue_free)
 
-# Brief red hurt-flash that eases back to normal. Kills any in-flight flash first
+# The Warden's end, staged as an extinguish rather than a kill (STORY_DESIGN §3): a last
+# warm flare as the guarded thing is relit, then the silhouette SINKS and cools to an
+# ember-glow and goes out — a settling glow, never a corpse. Warm embers and a soft warm
+# ring instead of ash and a crunch; a gentler beat than a husk's death.
+func _gutter_out() -> void:
+	var up: Vector2 = Vector2(0.0, -22.0 * Palette.ACTOR_SCALE)
+	Vfx.ring(get_parent(), global_position + up, 130.0, Palette.GOLD_L, 0.85)
+	Vfx.embers(get_parent(), global_position + up, 22, Palette.EMBER)
+	Vfx.embers(get_parent(), global_position, 14, Palette.GOLD_L)
+	Vfx.hitstop(self, 0.07)
+	Sfx.play("warm", -3.0, 0.9)
+	Main.shake(0.06)   # a settling, not a slam
+	if _sprite == null:
+		queue_free()
+		return
+	_sprite.modulate = Palette.GOLD_L          # the last warm flare — the relight
+	var tw := create_tween()
+	# Flare a touch brighter, then let the shape settle: shrink IN (not squash flat),
+	# cool from gold to a deep ember, and fade to nothing — the cold's hold released.
+	tw.tween_property(_sprite, "scale", _base_scale * 1.12, 0.12) \
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tw.tween_property(_sprite, "scale", _base_scale * 0.68, 0.55) \
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+	tw.parallel().tween_property(_sprite, "modulate", Palette.EMBER, 0.30)
+	tw.parallel().tween_property(_sprite, "modulate:a", 0.0, 0.5).set_delay(0.18)
+	tw.tween_callback(queue_free)
+
+# Brief hurt-flash that eases back to the resting tint. Kills any in-flight flash first
 # so rapid hits keep flashing instead of freezing mid-tween.
 func _flash() -> void:
 	if _sprite == null:
@@ -611,9 +644,23 @@ func _flash() -> void:
 		return
 	if _flash_tw != null and _flash_tw.is_valid():
 		_flash_tw.kill()
-	_sprite.modulate = Palette.BLOOD
+	# A Warden does not bleed — it GUTTERS. A struck Warden flickers WARM for a beat, like
+	# a flame batted at, then settles a shade DIMMER (never redder) as the cold loses its
+	# hold on the shape (STORY_DESIGN §3, "every hit dims it a shade"). Everything else
+	# takes the ordinary red hurt-flash.
+	_sprite.modulate = Color(1.0, 0.94, 0.78) if kind == "warden" else Palette.BLOOD
 	_flash_tw = create_tween()
-	_flash_tw.tween_property(_sprite, "modulate", _base_tint, 0.18)
+	_flash_tw.tween_property(_sprite, "modulate", _rest_tint(), 0.18)
+
+# The tint the body settles back to between hits. A Warden's DIMS with its remaining
+# "hold on the shape" (hp): full and near-white when whole, a dim desaturated blue-grey
+# when nearly spent — so the boss reads as guttering out, not bleeding (STORY_DESIGN §3).
+# Every other enemy simply rests at its kind tint.
+func _rest_tint() -> Color:
+	if kind == "warden":
+		var f: float = clampf(float(hp) / float(maxi(1, max_hp)), 0.0, 1.0)
+		return Color(0.50, 0.55, 0.68).lerp(Palette.WHITE, f)
+	return _base_tint
 
 # ---------------------------------------------------------------------------
 # Lobber blast: a marked ground spot + an arcing orb that damages on landing.

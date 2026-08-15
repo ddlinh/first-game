@@ -56,11 +56,24 @@ func _populate_character() -> void:
 		return
 	for c in _char_panel.get_children():
 		c.queue_free()
+	# Host the sheet in a height-capped scroll so a full roster (name + wrapped lore +
+	# attunement per survivor, on top of stats/boons) can't clip off a small viewport — it
+	# scrolls past the cap, and stays compact when the roster is sparse (review nit).
+	var vh: float = 720.0
+	if _hud != null and _hud.get_viewport() != null:
+		vh = _hud.get_viewport().get_visible_rect().size.y
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.mouse_filter = Control.MOUSE_FILTER_PASS   # scrolls, but stays a pass-through overlay
+	var cap: float = maxf(220.0, vh - 96.0)
+	var est: float = 156.0 + float(GameState.rescued.size()) * 98.0   # rough content height
+	scroll.custom_minimum_size = Vector2(332.0, minf(est, cap))
+	_char_panel.add_child(scroll)
 	var vb := VBoxContainer.new()
 	vb.add_theme_constant_override("separation", 5)
-	vb.custom_minimum_size = Vector2(210, 0)
+	vb.custom_minimum_size = Vector2(320, 0)
 	UiKit.ignore(vb)
-	_char_panel.add_child(vb)
+	scroll.add_child(vb)
 	vb.add_child(UiKit.label("THE KINDLED", 16, Palette.EMBER))
 	# Succession (run-scoped) + Soil (the meta head-start the next descent begins at).
 	var hero: Node = _hud.get_tree().get_first_node_in_group("player")
@@ -99,8 +112,9 @@ func _populate_character() -> void:
 		var pv: Variant = hero.get("provisions")
 		if pv != null and int(pv) > 0:
 			vb.add_child(UiKit.label(Loc.t("Provisions   x%d  (auto-heal when hurt)") % int(pv), 13, Palette.MOSS_L))
-	# Attunements earned (rescued survivors), by element.
-	vb.add_child(UiKit.label("Attunements", 14, Palette.EMBER))
+	# The rescued, as people first (VISION: people are the reward) — a name, a line of who
+	# they are, then the craft-attunement they carry home — not a bare stat roster.
+	vb.add_child(UiKit.label("The Rescued", 14, Palette.EMBER))
 	if GameState.rescued.is_empty():
 		vb.add_child(UiKit.label("—  none yet", 13, Palette.UI_DIM))
 	else:
@@ -109,6 +123,16 @@ func _populate_character() -> void:
 			var nm: String = Loc.t(String(a.get("name", pillar)))
 			var ds: String = Loc.t(String(a.get("desc", "")))
 			var el: String = Loc.t(String(a.get("element", "")))
+			# Translate the "name the role" template BEFORE interpolating (loc.gd contract);
+			# UiKit.label's own Loc.t is then a no-op on the finished string.
+			var who: String = Loc.t("%s the %s") % [GameState.survivor_name(pillar), Loc.t(pillar)]
+			vb.add_child(UiKit.label(who, 14, Palette.GOLD_L))
+			var lore: String = GameState.survivor_lore(pillar)
+			if lore != "":
+				var ll := UiKit.label(lore, 12, Palette.UI_DIM)
+				ll.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+				ll.custom_minimum_size = Vector2(300, 0)
+				vb.add_child(ll)
 			vb.add_child(UiKit.label("• %s  (%s) — %s" % [nm, el, ds], 13, Palette.UI_TEXT))
 	vb.add_child(UiKit.label("[C] close    ·    [K] Codex", 12, Palette.UI_DIM))
 

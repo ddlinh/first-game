@@ -464,7 +464,7 @@ func _on_room_cleared(silent: bool = false) -> void:
 	GameState.run_stats["rooms"] = int(GameState.run_stats.get("rooms", 0)) + 1
 	# The Ember speaks the first time the Warden falls (CRITIQUE A5) — one-time, persisted.
 	if node_type == "boss":
-		Main.tip("ember_first_boss", "The brute falls. It was only ever the cold, wearing a shape to frighten you.")
+		Main.tip("ember_first_boss", "It doesn't fall — it gutters, and goes out. No beast: only the cold wearing a shape, holding a place it feared you'd warm. It has no more reason to stand.")
 		# The reveal has landed in play — now recover the Warden's memory so the Codex can deepen it (A-antag).
 		GameState.unlock_codex("the_warden")
 	if hud and hud.has_method("hide_boss"):

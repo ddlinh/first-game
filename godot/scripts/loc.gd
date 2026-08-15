@@ -95,12 +95,52 @@ const VI := {
 		"Đang đặt %s — chọn ô đã khai hoang   ·   mũi tên/chuột, Enter/nhấp, Esc",
 	"Relocating %s — pick a tended tile   ·   arrows/mouse, Enter/click, Esc":
 		"Đang di dời %s — chọn ô đã khai hoang   ·   mũi tên/chuột, Enter/nhấp, Esc",
-	"Warmth here: +%d%%   ·   closer to the hearth is warmer   ·   Esc to cancel":
-		"Hơi ấm tại đây: +%d%%   ·   càng gần lò sưởi càng ấm   ·   Esc để hủy",
-	"Relocating — pick a tended tile   ·   Esc to cancel":
-		"Đang di dời — chọn ô đã khai hoang   ·   Esc để hủy",
+	"Warmth here: +%d%%   ·   closer to the hearth is warmer   ·   R turns it   ·   Esc to cancel":
+		"Hơi ấm tại đây: +%d%%   ·   càng gần lò sưởi càng ấm   ·   R để xoay   ·   Esc để hủy",
+	"Relocating — pick a tended tile   ·   R turns it   ·   Esc to cancel":
+		"Đang di dời — chọn ô đã khai hoang   ·   R để xoay   ·   Esc để hủy",
 	"Blocked tile — pick a bright, empty one   ·   Esc to cancel":
 		"Ô bị chặn — chọn ô sáng, trống   ·   Esc để hủy",
+
+	# --- M8: player expression (rotation / paths / decorations) ---
+	"Lay Paths": "Lát Đường", "Turn": "Xoay", "%s turned": "Đã xoay %s",
+	"Face it the other way — looks only, no change to its warmth.":
+		"Quay nó về hướng khác — chỉ để nhìn, không đổi hơi ấm.",
+	"Paint dirt paths between your buildings — purely for looks, no warmth.":
+		"Vẽ những lối đất giữa các công trình — thuần để nhìn, không có hơi ấm.",
+	"Decoration — dresses the town, adds no warmth.":
+		"Trang trí — tô điểm ngôi làng, không thêm hơi ấm.",
+	"Paint paths — click or drag tended tiles   ·   Esc when done":
+		"Vẽ lối đi — nhấp hoặc kéo trên ô đã khai hoang   ·   Esc khi xong",
+	"Click to pick this decoration back up   ·   Esc when done":
+		"Nhấp để nhặt lại vật trang trí này   ·   Esc khi xong",
+	"Place a decoration — looks only   ·   R turns it   ·   Esc when done":
+		"Đặt một vật trang trí — chỉ để nhìn   ·   R để xoay   ·   Esc khi xong",
+	"Can't decorate here — pick a tended, empty tile   ·   Esc when done":
+		"Không trang trí được ở đây — chọn ô đã khai hoang, còn trống   ·   Esc khi xong",
+	# Decoration names
+	"Flower Bed": "Luống Hoa", "Kitchen Garden": "Vườn Rau", "Drying Rack": "Giàn Phơi",
+	"Carved Posts": "Cột Chạm", "Lantern Stand": "Giá Đèn", "Banner": "Cờ Phướn",
+	"Coopered Barrels": "Thùng Gỗ Đóng Đai",
+	# The one-time build-menu hint + each decoration's unlock flavour
+	("Press R to turn a building or decoration as you place it. 'Lay Paths' and the craft "
+		+ "decorations are pure looks — they make the town yours without changing its warmth."):
+		"Nhấn R để xoay một công trình hoặc vật trang trí khi đang đặt. 'Lát Đường' và các vật "
+		+ "trang trí theo nghề thuần để nhìn — chúng khiến ngôi làng là của riêng ngươi mà không đổi hơi ấm.",
+	"Rowan scatters seed along the path — the first colour this ground has held in a long age.":
+		"Rowan rắc hạt dọc lối đi — sắc màu đầu tiên mảnh đất này giữ được sau bao thời đại dài.",
+	"A kitchen garden by the hearth. Rowan plants what a village eats between the harvests.":
+		"Một vườn rau bên lò sưởi. Rowan trồng thứ cả làng ăn giữa những mùa gặt.",
+	"Cut reeds racked to dry — thatch, mats, winter fodder. Nothing a tended field grows is wasted.":
+		"Lau sậy cắt về phơi trên giàn — lợp mái, đan chiếu, cỏ khô mùa đông. Chẳng gì từ ruộng được chăm bón bị phí.",
+	"Malin shows the others how to raise a carved post — a boundary you chose, not one the cold drew.":
+		"Malin chỉ mọi người dựng một cột chạm — ranh giới do ngươi chọn, chẳng phải do cái lạnh vạch ra.",
+	"Bex sets an iron stand for a lantern. Light you can carry, and light you can leave standing.":
+		"Bex dựng một giá sắt để treo đèn. Ánh sáng ngươi mang theo được, và ánh sáng ngươi để lại đứng đó.",
+	"Someone hangs a banner over the square. A place worth marking is a place worth staying.":
+		"Ai đó treo một lá cờ trên quảng trường. Nơi đáng để đánh dấu là nơi đáng để ở lại.",
+	"Barrels lined up by the commons — the kind of thing a village bothers to make once there are hands enough to spare for it.":
+		"Những thùng xếp hàng bên khu chung — thứ mà một ngôi làng mới chịu bỏ công làm khi đã có đủ người rảnh tay lo cho nó.",
 
 	# --- Living settlement: population (VILLAGE_DESIGN P4/P5) ---
 	"settler": "người định cư",
@@ -129,8 +169,6 @@ const VI := {
 		"Đã nửa đường về hơi ấm xưa. Thế giới đang nhớ lại cách sống.",
 	"So close now. My light strains upward, toward the surface and the sun.":
 		"Gần lắm rồi. Ánh sáng của ta vươn lên, hướng về mặt đất và mặt trời.",
-	"The brute falls. It was only ever the cold, wearing a shape to frighten you.":
-		"Con quái ngã xuống. Nó chỉ là cái lạnh, khoác một hình hài để dọa ngươi.",
 
 	# --- Ruins story fragments (CRITIQUE A3) ---
 	"Examine  [E]": "Xem xét  [E]", "You find…": "Ngươi tìm thấy…",
@@ -412,6 +450,11 @@ const VI := {
 		"Bóng tối chẳng phải lời nguyền — chỉ là tất cả những gì người sống thôi ghi nhớ. Hơi ấm được truyền tay, người này sang người khác, hoặc mất đi.",
 	"The Long Dark": "Đêm Trường Tăm Tối",
 	"the cold": "cái lạnh", "the deep": "vực sâu",
+	# The Ember's coda the first time the Warden gutters out (dungeon.gd, once ever).
+	("It doesn't fall — it gutters, and goes out. No beast: only the cold wearing a shape, "
+		+ "holding a place it feared you'd warm. It has no more reason to stand."):
+		"Nó không gục xuống — nó leo lét, rồi tắt ngấm. Chẳng phải quái vật: chỉ là cái lạnh khoác lấy "
+		+ "một hình hài, giữ một nơi mà nó sợ ngươi sẽ sưởi ấm. Nó chẳng còn lý do gì để đứng canh nữa.",
 	("No comet fell; no god turned away. The world went cold the way any "
 		+ "fire goes cold — one untended moment at a time. A craft left untaught. A "
 		+ "hearth left unlit. Warmth is never kept by wishing it; it is carried, hand "
@@ -435,15 +478,36 @@ const VI := {
 		+ "gác vực sâu bởi bóng tối vẫn sợ thứ từng được nhóm lên nơi đó, và có thể được nhóm "
 		+ "lại lần nữa.",
 
-	# --- Succession-stage flavor (CRITIQUE A7): one ecological line per Bloom ---
-	"Pioneers move first: lichen and fireweed, cracking bare rock into the first thin soil.":
-		"Loài tiên phong đến trước: địa y và cỏ lửa, phá đá trơ thành lớp đất mỏng đầu tiên.",
-	"Herbs and grasses root in — the ground learns to hold water, and to keep its own warmth.":
-		"Thảo mộc và cỏ bén rễ — mặt đất học cách giữ nước, và giữ lấy hơi ấm của chính mình.",
-	"Shrubs crowd close: shade, shelter, and cover enough for larger life to return.":
-		"Bụi cây chen chúc: bóng râm, chỗ trú, và lớp che đủ để sự sống lớn hơn quay về.",
-	"A closed canopy at last. The forest now makes and keeps its own weather — alive, and self-warming.":
-		"Cuối cùng, một tán rừng khép kín. Giờ khu rừng tự tạo và giữ lấy khí hậu của mình — sống động, và tự sưởi ấm.",
+	# --- The Ember's per-succession-stage voice (STORY_DESIGN §3): one line per seral stage ---
+	("Bare mineral rock, scoured to nothing. Nothing has grown here — not yet, not ever. "
+		+ "But nothing grows anywhere until something dares to be first."):
+		"Đá trơ, bị bào mòn đến không còn gì. Nơi đây chưa từng có gì mọc lên — chưa bao giờ. "
+		+ "Nhưng chẳng nơi nào có sự sống cho tới khi một thứ dám làm kẻ đầu tiên.",
+	"There — lichen on the stone, the boldest life there is. It asks for almost nothing, and it begins everything.":
+		"Kìa — địa y trên đá, sự sống gan dạ nhất trên đời. Nó cần gần như chẳng gì, mà lại khởi đầu mọi thứ.",
+	"Green, and soft enough to bruise. Fragile things are how a world tells you it has stopped dying.":
+		"Xanh mướt, và mềm đến độ chạm là bầm. Những thứ mong manh là cách một thế giới báo rằng nó đã thôi lụi tàn.",
+	"It tangles now, reaches, competes. Crowding is a kind of confidence. Let it fight for the light.":
+		"Giờ nó đan xen, vươn ra, tranh giành. Chen chúc cũng là một dạng tự tin. Cứ để nó giành lấy ánh sáng.",
+	("Look up. It closes over us like a held breath let go. This is what patience becomes: "
+		+ "shade for something that comes after."):
+		"Ngước lên xem. Nó khép lại trên đầu ta như một hơi thở nén được buông ra. Đây là thành quả của "
+		+ "sự kiên nhẫn: bóng mát cho những gì đến sau.",
+
+	# --- The rescued, as people (VISION): the character sheet's roster of who they are ---
+	"The Rescued": "Những Người Được Cứu",
+	"%s the %s": "%s — %s",
+	("Rowan kept the seed-vault through the long winters. He planted the last handful "
+		+ "rather than eat it — that is the whole of him."):
+		"Rowan giữ kho hạt giống qua những mùa đông dài. Nắm hạt cuối cùng, anh đem gieo chứ "
+		+ "không ăn — con người anh chỉ có vậy.",
+	("Bex learned the forge from her mother, who learned it from hers. She reads a fire's "
+		+ "colour the way you read a face."):
+		"Bex học nghề rèn từ mẹ, người học lại từ bà. Cô đọc màu ngọn lửa như cách ta đọc một gương mặt.",
+	("Malin raised half this village the first time. She still walks the old foundations "
+		+ "at night, naming rooms that aren't there yet."):
+		"Malin từng dựng nửa ngôi làng này lần đầu tiên. Đêm đêm cô vẫn đi dọc những nền móng cũ, "
+		+ "gọi tên những căn phòng chưa hề có.",
 
 	# --- HUD: headers & static labels ---
 	"WARMTH": "HƠI ẤM", "SOIL": "ĐẤT MÙN", "CONTROLS": "ĐIỀU KHIỂN",
