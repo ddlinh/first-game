@@ -119,6 +119,10 @@ var _ground: Node2D = null
 var _building_roots: Dictionary = {}
 # Cells occupied by the stream — walkable but never buildable.
 var _river_cells: Dictionary = {}
+# Cells kept clear by design — the paved town square around the hearth and any plaza
+# furniture — so a build never lands on the civic centre or on the bonfire. Rebuilt
+# with the ground (grows with the clearing). Walkable, never buildable.
+var _reserved: Dictionary = {}
 
 # --- Build placement state ---
 var _placing: bool = false          # true while a ghost is following the cursor
@@ -240,6 +244,8 @@ func world_to_cell(point: Vector2) -> Vector2i:
 func _cell_free(cell: Vector2i) -> bool:
 	if _river_cells.has(cell):
 		return false
+	if _reserved.has(cell):
+		return false
 	if maxi(absi(cell.x - CENTER.x), absi(cell.y - CENTER.y)) > GameState.village_radius:
 		return false
 	return not GameState.grid.has(cell)
@@ -248,19 +254,40 @@ func _cell_free(cell: Vector2i) -> bool:
 # World construction
 # ---------------------------------------------------------------------------
 
-# Lay the whole spacious field: bright tended grass inside the clearing, wilder
-# worn grass beyond it. Rebuilt whenever the clearing expands.
+# Lay the whole spacious field as a planned little TOWN, not a bare lawn: a paved
+# flagstone SQUARE around the hearth, dirt AVENUES crossing it and a paved perimeter
+# RING, tended grass "blocks" between the roads where buildings go, and wilder worn
+# grass beyond the clearing. Rebuilt whenever the clearing expands. Also (re)marks the
+# reserved square so a build never lands on the civic centre or the bonfire.
 func _render_ground() -> void:
 	if _ground != null and is_instance_valid(_ground):
 		_ground.queue_free()
 	_ground = Node2D.new()
 	add_child(_ground)
+	_reserved.clear()
+	# Keep every decorative town lot un-buildable, so a player build never lands on a
+	# scenery house, garden or brazier the warmth-growth spawns (see _grow_town).
+	for lot: Dictionary in TOWN_LOTS:
+		_reserved[lot["c"]] = true
 	var r: int = GameState.village_radius
 	for gy in range(-FIELD, FIELD + 1):
 		for gx in range(-FIELD, FIELD + 1):
-			var cleared: bool = maxi(absi(gx - CENTER.x), absi(gy - CENTER.y)) <= r
+			var d: int = maxi(absi(gx - CENTER.x), absi(gy - CENTER.y))
+			var key := "tile_grass_worn"
+			if d <= r:
+				key = "tile_grass"
+				if d <= 2:
+					key = "tile_plaza"                      # the paved town square at the heart
+					if d <= 1:
+						_reserved[Vector2i(gx, gy)] = true  # keep the centre open (and off the hearth)
+				elif gy == 2 or gy == 5:
+					key = "tile_plaza"                      # stone quays flanking the canal
+				elif gx == CENTER.x or gy == CENTER.y:
+					key = "tile_path"                       # dirt avenues out of the square
+				elif d == r and r >= 2:
+					key = "tile_path"                       # a paved perimeter ring road
 			var s := Sprite2D.new()
-			s.texture = Assets.tex("tile_grass" if cleared else "tile_grass_worn")
+			s.texture = Assets.tex(key)
 			# Squashed-aspect tile stretched back to a full square cell so rows meet.
 			s.scale = Vector2(Palette.TILE_SX, Palette.TILE_SY)
 			s.position = cell_to_world(Vector2i(gx, gy))
@@ -304,22 +331,58 @@ func _dress_nature() -> void:
 			water.add_child(s)
 	# A footbridge on the central path down to the gate.
 	Iso.prop(self, "bridge", cell_to_world(Vector2i(0, 3)) + Vector2(0.0, float(Palette.CELL) * 0.5), 0.0, 0.0)
-	# Reeds fringing both banks — they bend in the wind.
-	for gx in [-7, -4, -1, 4, 6, 8]:
+	# Reeds fringing both banks — a denser fringe reads the stream as a tended canal.
+	for gx in [-8, -6, -4, -2, 1, 3, 5, 7]:
 		_windify(Iso.prop(self, "reeds", cell_to_world(Vector2i(gx, 2)) + Vector2(0.0, 12.0), 22.0, 2.0))
 		_windify(Iso.prop(self, "reeds", cell_to_world(Vector2i(gx + 1, 5)) - Vector2(0.0, 8.0), 22.0, 2.0))
 	# Greenery in the outer wild grass (deterministic so the field looks composed).
-	# Everything that grows sways in the wind; rocks stay put.
-	_scatter_prop("tree", 9, 30, 4, 48.0, true)
-	_scatter_prop("bush", 12, 41, 3, 30.0, true)
-	_scatter_prop("flowers", 16, 55, 3, 0.0, true)
-	_scatter_prop("rock_s", 6, 70, 4, 24.0, false)
+	# Denser than a lawn — orchards and flower beds ring a tended town.
+	_scatter_prop("tree", 14, 30, 4, 48.0, true)
+	_scatter_prop("bush", 20, 41, 3, 30.0, true)
+	_scatter_prop("flowers", 30, 55, 3, 0.0, true)
+	_scatter_prop("rock_s", 7, 70, 4, 24.0, false)
 	# Dead trees near the clearing that visibly green over as warmth rises — the
 	# thaw the player is working toward, made physical (QA F-23).
 	_add_thaw_marker(Vector2i(-3, -4), 0.12)
 	_add_thaw_marker(Vector2i(3, -4), 0.24)
 	_add_thaw_marker(Vector2i(-5, -1), 0.40)
 	_add_thaw_marker(Vector2i(5, -2), 0.58)
+
+# The town GROWS with warmth (per the "evolve with GWI" direction). Each lot is a
+# decorative element that pops in the moment GWI first crosses its threshold, so a cold
+# world is a lone hearth on bare stone and a warm one is a bustling, dressed town —
+# honouring "you are the last ember" while the late-game reads as a Settlers-style
+# square. Every lot cell is RESERVED (see _render_ground), so a build never lands on it.
+# kinds: "brazier" gets a warm light; "building_*" are scenery houses at the fringe.
+const TOWN_LOTS := [
+	{"c": Vector2i(-1, -1), "tex": "brazier",           "at": 0.10, "sh": 22.0, "light": true},
+	{"c": Vector2i(1, -1),  "tex": "brazier",           "at": 0.10, "sh": 22.0, "light": true},
+	{"c": Vector2i(-2, -2), "tex": "building_crop_bed", "at": 0.22, "sh": 24.0},
+	{"c": Vector2i(2, -2),  "tex": "building_crop_bed", "at": 0.34, "sh": 24.0},
+	{"c": Vector2i(-2, 2),  "tex": "barrel",            "at": 0.30, "sh": 20.0},
+	{"c": Vector2i(2, 2),   "tex": "banner",            "at": 0.44, "sh": 16.0},
+	{"c": Vector2i(-5, -2), "tex": "building_cabin",    "at": 0.55, "sh": 30.0},
+	{"c": Vector2i(5, -2),  "tex": "building_workshop", "at": 0.70, "sh": 30.0},
+	{"c": Vector2i(-6, 1),  "tex": "building_granary",  "at": 0.82, "sh": 30.0},
+	{"c": Vector2i(6, 1),   "tex": "building_cabin",    "at": 0.92, "sh": 30.0},
+]
+var _town_done: Dictionary = {}
+
+# Reveal every town lot whose GWI threshold the world has now crossed. Called from
+# _apply_warmth, so it runs once on entry (materialising a warm save's whole town) and
+# again each time warmth ticks up during play (one lot pops in with a warm sparkle).
+func _grow_town(gwi: float) -> void:
+	for lot: Dictionary in TOWN_LOTS:
+		var cell: Vector2i = lot["c"]
+		if _town_done.has(cell):
+			continue
+		if gwi + 0.0001 < float(lot["at"]):
+			continue
+		_town_done[cell] = true
+		var n: Node2D = Iso.prop(self, String(lot["tex"]), cell_to_world(cell), float(lot["sh"]), 2.0)
+		if bool(lot.get("light", false)):
+			Iso.light(n, Palette.TORCH.lerp(Palette.GOLD_L, 0.2), 100.0, 0.28)
+		Vfx.embers(self, n.global_position + Vector2(0.0, -22.0), 8, Palette.GOLD_L)
 
 # One dead tree that becomes a living tree once GWI crosses `threshold`.
 func _add_thaw_marker(cell: Vector2i, threshold: float) -> void:
@@ -340,6 +403,7 @@ func _add_thaw_marker(cell: Vector2i, threshold: float) -> void:
 # visible (QA F-18/F-23).
 func _apply_warmth(gwi: float) -> void:
 	Main.set_grade(0.4 + gwi * 0.6, 0.7, 0.7)
+	_grow_town(gwi)   # the town fills in as the world warms (sparse when cold)
 	if _bonfire_light != null and is_instance_valid(_bonfire_light):
 		_bonfire_light.texture_scale = lerpf(240.0, 340.0, gwi) / 128.0
 		# Rebuild the flicker around a warmth-driven base energy, else the looping

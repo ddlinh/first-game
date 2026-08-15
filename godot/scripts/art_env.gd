@@ -36,6 +36,7 @@ static func bake(a: Node) -> void:
 	a.put("tile_grass_worn", _tile_grass_worn())
 	a.put("tile_dirt", _tile_dirt())
 	a.put("tile_path", _tile_path())
+	a.put("tile_plaza", _tile_plaza())
 	a.put("tile_water", _tile_water())
 	a.put("tile_floor", _floor_base(0.0, false))
 	a.put("tile_floor2", _floor_base(24.0, true))
@@ -378,6 +379,30 @@ static func _tile_path() -> Image:
 	_specks(im, 311, 26, 1.4, 4.0, [Palette.DIRT_D, Palette.SOIL.lerp(Palette.AMBER, 0.22)])
 	_domes(im, 331, 6, 2.0, 4.2, Palette.STONE2_D.lerp(Palette.EARTH, 0.72),
 		Palette.STONE2_D.lerp(Palette.AMBER, 0.3))
+	return im
+
+
+## The paved town SQUARE (village). Warm flagstones in a running-bond course over a
+## warm earthen joint — the same seamless `_slab` machinery as the dungeon floor, but
+## warmed to the surface palette so the plaza reads as a tended civic space, not a
+## cold cellar. Laid on the inner clearing ring around the hearth.
+static func _tile_plaza() -> Image:
+	var im := _tile(Palette.SOIL_D)
+	# Grit in the joints, kept warm so the seams never read blue or pale.
+	_specks(im, 517, 12, 2.0, 6.0, [Palette.SOIL_D.darkened(0.1), Palette.EARTH])
+	# Warm sandstone, NOT cool pale grey — the plaza should read as a sunlit civic
+	# floor, so the flagstone sits in the amber band, not the stone band.
+	var face := Palette.AMBER.darkened(0.22)
+	# Running bond: the lower course is offset half a stone, so a field of these reads
+	# as a laid plaza, not a grid. Both courses wrap-safe (via `_slab`) so tiles join.
+	var courses := [[15.0, 0.0], [45.0, 24.0]]
+	var idx := 0
+	for row: Array in courses:
+		var yy: float = row[0]
+		var sh: float = row[1]
+		for gx: float in [24.0, 72.0]:
+			_slab(im, gx + sh, yy, face, 531 + idx * 37)
+			idx += 1
 	return im
 
 

@@ -101,7 +101,9 @@ worth raising). Warmth is the only pressure, and it only ever goes up.
 
 ### 🟡 V10 — Placement carries no spatial gameplay
 Any tended tile is interchangeable. No adjacency bonuses, no zones, no roads, no "the Well must be
-near the Farm." The grid + ghost UX is nice, but placement is decoration, not decision.
+near the Farm." The grid + ghost UX is nice, but placement is decoration, not decision. **Buildings
+can't even be rotated** (`village.gd` holds no orientation state). This — plus the *ownership* want it
+implies (players want a town that reads as **theirs**) — is the subject of the new §6.
 
 ---
 
@@ -177,7 +179,7 @@ survivor archetype gates a building line, which is also more reasons to rescue p
 | **Granary** (Farmer + Builder) | wood + stone | **Raises resource caps**, preserves food (warmth) | Silo, root cellar |
 | **Well / Cistern** (Mason) | stone | New resource **water** → farm & needs | Aqueduct |
 | **Apothecary** (Healer) | herbs + wood | Provisions/healing tiers | Tinctures, field kit |
-| **Watchtower / Palisade** (Builder) | wood + stone | **Village defence** (if raids are added, §6) | Stone walls, gate |
+| **Watchtower / Palisade** (Builder) | wood + stone | **Village defence** (if raids are added, §7) | Stone walls, gate |
 | **Library / Hearth-shrine** (Scholar) | relics from ruins | Codex/knowledge, boon rerolls, warmth | Archive |
 
 Even shipping **two or three** of these (Carpenter, Granary, Well) alongside the farm chain gives the
@@ -185,7 +187,66 @@ village a real progression ladder and interdependence (Granary needs Carpenter; 
 
 ---
 
-## 6. Prioritised Recommendations
+## 6. Player Expression — Planning & Decorating the Settlement
+
+*Addresses V10 and a distinct, equally real player desire: **ownership.** Players want a settlement
+that reads as legibly **theirs** — planned and dressed to taste — not just an optimally-warm grid.
+This section keeps that want on-thesis without breaking Pillar 1's "the skyline is a readable résumé."
+The visual target for all of this — a dense, decorated, Settlers-style isometric town — is specced in
+**`ART_DIRECTION.md`**.*
+
+### 6.1 The tension, stated honestly
+The game deliberately makes **appearance = function**: you read a save's whole history off its skyline
+(forges vs fields, diverse vs monoculture, one ring vs three). **Free-form decoration threatens that
+signal** — if any village can be made to look like any other, the résumé stops meaning anything. The
+fix is to split the want into two layers and let only the *harmless* one be free:
+
+- **Planning (functional layout)** — where things go, how they connect. This is a real **decision** we
+  should deepen (repairs V10); it already bends warmth via distance-to-hearth.
+- **Decoration (cosmetic dressing)** — pure look, **GWI-neutral by rule**, so it never distorts the
+  résumé the skyline reports. The functional silhouette still reads at a glance; the player just
+  details the town inside it.
+
+### 6.2 Layer A — Planning tools (repairs V10)
+Turn placement from decoration into deliberate town-planning:
+- **Rotation** — buildings face a chosen direction (currently impossible; no orient state in
+  `village.gd`). The cheapest single win for "this is mine."
+- **Paths / roads** — a paintable ground tile laid between buildings; cosmetic by default, with an
+  optional light **adjacency** hook later (a building on a road tends faster; villagers walk it).
+- **Zones & soft adjacency** (⟢ later) — small bonuses for sensible layout (Granary near Farm, Well
+  near crops) — the §5 interdependence made **spatial**, the direct answer to V10.
+- **Rings as a design canvas** — the existing expandable clearing already gives ring structure; expose
+  it as intentional (name/theme a ring) rather than a hidden radius.
+
+### 6.3 Layer B — Decoration, earned as knowledge (on-thesis)
+The dressing itself should **come from the people you rescue**, so cosmetics *are* the thesis, not a
+bolt-on:
+- Rescue **Farmer** → kitchen gardens, flower beds, drying racks; **Builder** → carved posts, paved
+  courts, arched lintels; **Smith** → lantern-stands, weathervanes; a growing **population** → banners,
+  washing lines, benches ringing the bonfire that simply *appear* as the village fills.
+- Each cosmetic is **unlocked by recovered craft / Codex progress** — decoration = remembered knowledge
+  made visible. A bare, cold save literally *cannot* be as decorated as a warm, populous one, so even
+  the cosmetic layer stays an honest record of what the player carried home.
+- **GWI-neutral hard rule:** decorations never grant warmth, boons, or caps. Want warmth → build a real
+  building; want ownership → decorate. This rule is exactly what keeps the skyline honest.
+
+### 6.4 Science-first & fiction fit
+Per the project's iron rule, cosmetics must be things a **recovering post-freeze settlement would
+actually make** — carved timber, woven mats, painted lintels, kitchen gardens, hearth-side furniture.
+No anachronism, no fantasy ornament, nothing that contradicts a cold world clawing back warmth. ⚑ The
+only liberty is *pace* (a settlement dresses itself faster than history would), consistent with every
+other compressed-timescale liberty in the game.
+
+### 6.5 Build cost, honestly
+Not free. Needs: a **cosmetic catalogue** (art per item), a **free-placement prop system** distinct
+from the building grid (props aren't grid-cells), **rotation state** on buildings, and **new save
+fields** (placed props + orientations) — a sibling `GameState.decor` map alongside `GameState.grid`.
+Recommend a **cheap MVP first** — rotation + paths + ~5 craft-gated props — before a full catalogue,
+and keep every item GWI-neutral so it never touches balance.
+
+---
+
+## 7. Prioritised Recommendations
 
 | # | Recommendation | Fixes | Effort |
 |---|---|---|:---:|
@@ -195,13 +256,16 @@ village a real progression ladder and interdependence (Granary needs Carpenter; 
 | **P4** | **Production-over-time + worker assignment** — survivors staff buildings; output scales with population. | V1, V7 | L |
 | **P5** | **Storage caps + a soft economy** (Granary raises caps; food feeds survivors → more workers). | V4, V8 | M |
 | **P6** | **Village stakes** (optional) — occasional threat the walls/watchtower defend against, giving defensive buildings a purpose. | V9 | L |
+| **P7** | **Player-expression layer** (§6) — **rotation + paths** now (MVP); a **GWI-neutral, craft-gated decoration** catalogue and soft adjacency later. Gives ownership; repairs "placement is decoration, not decision." | V10, V5-adj | S (MVP) – L (full) |
 
 **Dependencies to note honestly:** P4/P5 assume a population model; P6 assumes a threat system (new
-content, larger scope). P1–P3 stand alone and are the highest value-to-effort — start there.
+content, larger scope). **P7's MVP (rotation + paths) stands alone and is a small, high-delight win;
+its full decoration catalogue needs a prop/placement + save system (§6.5) and is larger.** P1–P3 and
+P7-MVP are the highest value-to-effort — start there.
 
 ---
 
-## 7. Appendix — mapping to existing code & docs
+## 8. Appendix — mapping to existing code & docs
 
 - **Where the village lives:** `godot/scripts/village.gd` (`BUILDINGS`, `QUESTS`, `COMMISSIONS`,
   `_seed_and_rebuild`, `finish_building`, inner classes `CropPlot`/`Villager`/`Scaffold`).

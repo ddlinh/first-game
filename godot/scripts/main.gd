@@ -73,7 +73,7 @@ var _trauma_frame_id: int = -1   # process-frame the cap is tracking
 var _trauma_frame: float = 0.0   # trauma requested so far this frame
 var _punch: float = 0.0
 var _shake_t: float = 0.0
-var _base_zoom: float = 2.05
+var _base_zoom: float = 1.5   # pulled back for a Settlers-style town OVERVIEW (was 2.05, close-in)
 var _noise := FastNoiseLite.new()
 
 # --- Post-process state ---

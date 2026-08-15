@@ -59,6 +59,7 @@ tile_grass
 tile_grass2
 tile_grass_worn
 tile_path
+tile_plaza
 tile_wall
 tile_water
 tree
