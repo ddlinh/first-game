@@ -40,6 +40,12 @@ var _last_pos: Vector2 = Vector2.ZERO
 var _stuck_t: float = 0.0
 var _avoid: Vector2 = Vector2.ZERO
 var _avoid_t: float = 0.0
+# Finale sub-steps: the accelerated "village grows" montage and the M8 "make it yours" dressing.
+var _gsub: int = 0                  # grow sub-step (buildings raised so far)
+var _dsub: int = 0                  # dress sub-step (paths → decorations → rotate)
+var _dpath_i: int = 0               # next path tile to lay
+var _dprop_i: int = 0               # next decoration to place
+var _dress_paths: Array = []        # grass cells to pave (gathered from the live layout)
 
 const MOVES := ["move_left", "move_right", "move_up", "move_down"]
 
@@ -101,6 +107,10 @@ func _process(delta: float) -> void:
 		h0.call("dismiss_summary")
 		_announce("Dismissing the run summary")
 		return
+	# Safety net: never leave a HUD menu open. Only the build/expand phases open one on
+	# purpose; anything else (e.g. a manage post the chore walk tapped) is dismissed at
+	# once, so an "options"-style panel can't sit over the whole demo.
+	_menu_guard()
 	var p := _player()
 	if p == null:
 		return
@@ -138,9 +148,13 @@ func _on_enter_village() -> void:
 	_finishing = _runs_done >= MAX_RUNS
 	if _finishing:
 		_v_phase = "chores"
-		_announce("Home for good — %d run(s) banked, tending the village one last time" % _runs_done)
+		_gsub = 0; _dsub = 0; _dpath_i = 0; _dprop_i = 0
+		_announce("Home for good — the last run is banked. Now, make the village yours.")
+	elif _first_village:
+		_v_phase = "cold"
+		_announce("A dead world. One ember, one cat, one cold clearing.")
 	else:
-		_v_phase = "build" if _first_village else "chores"
+		_v_phase = "chores"
 		_announce("Home — tending the village")
 
 # ---------------------------------------------------------------------------
@@ -150,12 +164,18 @@ func _on_enter_village() -> void:
 # ---------------------------------------------------------------------------
 func _tick_village(delta: float) -> void:
 	match _v_phase:
+		"cold":
+			_phase_cold(delta)
 		"build":
 			_phase_build(delta)
 		"chores":
 			_phase_chores(delta)
 		"expand":
 			_phase_expand(delta)
+		"grow":
+			_phase_grow(delta)
+		"dress":
+			_phase_dress(delta)
 		"ending":
 			_phase_ending(delta)
 		_:
@@ -266,7 +286,7 @@ func _phase_chores(delta: float) -> void:
 
 # Chores done: on the final visit head to the ending; otherwise expand and descend again.
 func _after_chores() -> void:
-	_v_phase = "ending" if _finishing else "expand"
+	_v_phase = "grow" if _finishing else "expand"
 
 func _next_chore() -> Node2D:
 	var p := _player()
@@ -280,6 +300,8 @@ func _next_chore() -> Node2D:
 			continue
 		if n == gate:                              # the gate is the descend phase, not a chore
 			continue
+		if n.has_method("_level"):                 # a manage post (BuildingManager) — tapping it
+			continue                               # opens the manage menu, not a chore to do
 		if n.has_method("can_interact") and not bool(n.call("can_interact", p)):
 			continue
 		var d: float = p.global_position.distance_to((n as Node2D).global_position)
@@ -318,13 +340,159 @@ func _phase_descend(delta: float) -> void:
 		_tap("interact")
 		_announce("Descending into the ruins")
 
-# The closing beat: the hero is home, the run is banked. Drop back to real time for a
-# calm final hold, announce the ending, then quit — the scenario is complete, no loop.
+# ---------------------------------------------------------------------------
+# The demo finale: cold clearing → a growing town → dress it into your own (M8).
+# ---------------------------------------------------------------------------
+
+# Open on the bare, cold clearing so the "from nothing" arc reads before we build.
+func _phase_cold(delta: float) -> void:
+	_stop_move()
+	if _t > 4.0:
+		_v_phase = "build"
+		_t = 0.0
+		_announce("First, a roof against the dark.")
+
+# Buildings raised in the accelerated montage (mirrored/upright to vary the skyline).
+const GROW_BUILDS := [
+	Vector2i(-2, -1), Vector2i(-2, 1), Vector2i(3, 0), Vector2i(-3, 0), Vector2i(3, 2),
+]
+const GROW_TYPES := ["cabin", "forge", "workshop", "cabin", "granary"]
+
+# Compress "many runs" into a montage: remember every craft, draw in folk, and raise a
+# fuller, warmer skyline — so the finale has a real town to dress. The systems are the
+# game's own (grid + _add_building_sprite + GWI); only the pacing is a demo's.
+func _phase_grow(delta: float) -> void:
+	_stop_move()
+	_t += delta
+	var lyr := _layer()
+	if lyr == null:
+		_v_phase = "ending"
+		return
+	if _gsub == 0:
+		for pill in ["farmer", "smith", "builder"]:
+			if not GameState.has_rescued(pill):
+				GameState.add_rescued(pill)
+		GameState.settlers = maxi(GameState.settlers, 3)
+		GameState.population_changed.emit()
+		GameState.add_resource("wood", 90)
+		GameState.add_resource("stone", 70)
+		GameState.add_resource("iron", 30)
+		if GameState.village_radius < 4:
+			GameState.village_radius = 4
+			lyr.call("_render_ground")
+		_announce("Word spreads. The crafts come home, and folk gather to the warmth.")
+		_gsub = 1
+		_t = 0.0
+		return
+	var idx: int = _gsub - 1
+	if idx < GROW_BUILDS.size():
+		if _t < 1.1:
+			return
+		_t = 0.0
+		var cell: Vector2i = GROW_BUILDS[idx]
+		if bool(lyr.call("_cell_free", cell)):
+			GameState.grid[cell] = {"type": GROW_TYPES[idx], "built": true, "level": 1,
+				"orient": (-1 if (idx % 2 == 0) else 1)}
+			lyr.call("_add_building_sprite", cell, GROW_TYPES[idx])
+			GameState.add_gwi(0.06)
+			Vfx.embers(lyr, lyr.call("cell_to_world", cell), 18, Palette.GOLD)
+			Sfx.play("warm", -6.0)
+		_gsub += 1
+		return
+	if _t > 1.2:
+		_v_phase = "dress"
+		_dsub = 0
+		_dpath_i = 0
+		_dprop_i = 0
+		_t = 0.0
+		_announce("A warm skyline. Now — make it yours.")
+
+# The M8 "make it yours" pass: pave the courtyards, place each craft's decoration (with
+# its unlock line), and turn a building to face the square — all GWI-neutral.
+const DRESS_PROPS := [
+	{"id": "flowerbed",   "c": Vector2i(-1, 2), "o": 1},
+	{"id": "garden",      "c": Vector2i(1, 2),  "o": 1},
+	{"id": "drying_rack", "c": Vector2i(-4, 1), "o": -1},
+	{"id": "carved_post", "c": Vector2i(4, 1),  "o": 1},
+	{"id": "lantern",     "c": Vector2i(-4, 0), "o": 1},
+	{"id": "banner",      "c": Vector2i(4, 0),  "o": -1},
+	{"id": "barrels",     "c": Vector2i(4, -1), "o": 1},
+]
+
+func _phase_dress(delta: float) -> void:
+	_stop_move()
+	_t += delta
+	var lyr := _layer()
+	if lyr == null:
+		_v_phase = "ending"
+		return
+	if _dsub == 0:                                  # pave the grass courtyards, tile by tile
+		if _dress_paths.is_empty():
+			for yy in range(-2, 3):
+				for xx in range(-4, 5):
+					var c := Vector2i(xx, yy)
+					if bool(lyr.call("_path_ok", c)):
+						_dress_paths.append(c)
+			if _dress_paths.is_empty():
+				_dsub = 1
+				_t = 0.0
+				return
+		if _t < 0.10:
+			return
+		_t = 0.0
+		if _dpath_i < _dress_paths.size():
+			var cell: Vector2i = _dress_paths[_dpath_i]
+			var paths: Array = GameState.decor.get("paths", [])
+			paths.append(cell)
+			GameState.decor["paths"] = paths
+			lyr.call("_add_path_tile", cell)
+			_dpath_i += 1
+		else:
+			_dsub = 1
+			_t = 0.0
+			_announce("Paths laid between the doors.")
+		return
+	if _dsub == 1:                                  # place each craft-gated decoration
+		if _t < 0.95:
+			return
+		_t = 0.0
+		if _dprop_i < DRESS_PROPS.size():
+			var d: Dictionary = DRESS_PROPS[_dprop_i]
+			var cell: Vector2i = d["c"]
+			if bool(lyr.call("_decor_ok", cell)):
+				lyr.set("_place_id", String(d["id"]))
+				lyr.set("_place_orient", int(d["o"]))
+				lyr.call("_place_decor_at", cell)
+			_dprop_i += 1
+		else:
+			_dsub = 2
+			_t = 0.0
+			_announce("Decorations placed — %d props, %d path tiles dress the town" %
+				[(GameState.decor.get("props", []) as Array).size(),
+				 (GameState.decor.get("paths", []) as Array).size()])
+		return
+	if _dsub == 2:                                  # turn a building to face the square
+		if _t > 0.8:
+			for c in GameState.grid.keys():
+				var g: Dictionary = GameState.grid[c]
+				if bool(g.get("built", false)):
+					lyr.call("_rotate_building", c, String(g.get("type", "")))
+					break
+			_announce("A building turned to face the square.")
+			_dsub = 3
+			_t = 0.0
+		return
+	if _t > 1.0:                                    # done dressing → the final hold
+		_v_phase = "ending"
+		_t = 0.0
+
+# The closing beat: the town is warm and dressed. Drop back to real time for a calm final
+# hold, announce the ending, then quit — the scenario is complete, no loop.
 func _phase_ending(delta: float) -> void:
 	_release_all()
 	if _end_t == 0.0:
 		Engine.time_scale = 1.0
-		_announce("The ember is rekindled. The village endures. — demo complete")
+		_announce("From a cold clearing to a town that's yours. The ember endures. — demo complete")
 	_end_t += delta
 	if _end_t > 4.5:
 		_announce("Autoplay finished.")
@@ -538,6 +706,14 @@ func _hud() -> Node:
 		if c is CanvasLayer and c.has_method("toast"):
 			return c
 	return null
+
+# Close any HUD menu open when we don't expect one — only build/expand open one on purpose.
+func _menu_guard() -> void:
+	if _v_phase == "build" or _v_phase == "expand":
+		return
+	var h := _hud()
+	if h != null and bool(h.get("_menu_open")):
+		_action_event("cancel")
 
 func _in_village() -> bool:
 	var l := _layer()
